@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Page Materie</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 60px auto;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 40px 30px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .materie {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            margin-top: 40px;
+        }
+        .materia {
+            background: #e3eafc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.3em;
+            transition: background 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .materia:hover {
+            background: #b6d0fc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Seleziona la materia</h1>
+        <div class="materie">
+              <a class="materia" href="./progetto/informatica/progetti.html">INFORMATICA</a>
+            <a class="materia" href="tep.php">TEP</a>
+            <a class="materia" href="gpo.php">GPO</a>
+        </div>
+    </div>
+</body>
+</html>
