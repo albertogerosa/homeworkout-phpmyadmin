@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>CRUD Utenti - JS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        let utenti = [];
+        function creaUtente() {
+            const nome = document.getElementById('nome').value;
+            const email = document.getElementById('email').value;
+            const id = 'js_' + Math.random().toString(36).substr(2, 9);
+            if (nome && email) {
+                utenti.push({id, nome, email});
+                renderUtenti();
+                document.getElementById('nome').value = '';
+                document.getElementById('email').value = '';
+            }
+        }
+        function renderUtenti() {
+            const tbody = document.getElementById('utenti_body');
+            tbody.innerHTML = '';
+            utenti.forEach((utente, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${utente.id}</td>
+                    <td><input type='text' value='${utente.nome}' onchange='modificaNome(${idx}, this.value)'></td>
+                    <td><input type='email' value='${utente.email}' onchange='modificaEmail(${idx}, this.value)'></td>
+                    <td>
+                        <button class='btn btn-danger btn-sm' onclick='eliminaUtente(${idx})'>Elimina</button>
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+        }
+        function modificaNome(idx, val) {
+            utenti[idx].nome = val;
+        }
+        function modificaEmail(idx, val) {
+            utenti[idx].email = val;
+        }
+        function eliminaUtente(idx) {
+            utenti.splice(idx, 1);
+            renderUtenti();
+        }
+    </script>
+</head>
+<body class="container py-5">
+    <h1 class="mb-4">Gestione Utenti (JS)</h1>
+    <div class="mb-4">
+        <input type="text" id="nome" placeholder="Nome" class="form-control mb-2" required>
+        <input type="email" id="email" placeholder="Email" class="form-control mb-2" required>
+        <button onclick="creaUtente()" class="btn btn-primary">Crea Utente</button>
+    </div>
+    <h2>Lista Utenti</h2>
+    <table class="table table-bordered">
+        <thead><tr><th>ID</th><th>Nome</th><th>Email</th><th>Azioni</th></tr></thead>
+        <tbody id="utenti_body"></tbody>
+    </table>
+    <a href="../../home.php" class="btn btn-secondary mt-4">Torna alla Home Page</a>
+    <script>renderUtenti();</script>
+</body>
+</html>

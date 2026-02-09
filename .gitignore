@@ -1,0 +1,10 @@
+*.log
+*.tmp
+node_modules/
+vendor/
+.DS_Store
+*.swp
+*.swo
+__pycache__/
+.env
+config/database.php
