@@ -2,6 +2,7 @@
 session_start();
 require_once 'database.php';
 require_once __DIR__ . '/JWT/jwt_helper.php';
+require_once __DIR__ . '/tenant_helper.php';
 
 if (!isset($_SESSION['utente_id'])) {
     header("Location: login.php");
@@ -11,12 +12,15 @@ if (!isset($_SESSION['utente_id'])) {
 $utente_id = $_SESSION['utente_id'];
 $ruolo_id = 0;
 $ruolo_nome = 'utente';
+$tenant_id = homeworkoutCurrentTenantId();
+$is_super_admin = false;
 
 $token = $_SESSION['access_token'] ?? '';
 if (!empty($token)) {
     $tokenData = validateJWT($token);
     if ($tokenData && !empty($tokenData['role_id'])) {
         $ruolo_id = (int)$tokenData['role_id'];
+        $is_super_admin = homeworkoutIsSuperAdmin($ruolo_id, $_SESSION['ruolo_nome'] ?? null);
     }
 }
 
@@ -30,18 +34,28 @@ try {
     $stmtNomeRuolo = $pdo->prepare("SELECT nome_ruolo FROM ruoli WHERE id = :rid LIMIT 1");
     $stmtNomeRuolo->execute(['rid' => $ruolo_id]);
     $ruolo_nome = $stmtNomeRuolo->fetchColumn() ?: 'utente';
+    $is_super_admin = homeworkoutIsSuperAdmin($ruolo_id, $ruolo_nome);
 
     $_SESSION['ruolo_id'] = $ruolo_id;
     $_SESSION['ruolo_nome'] = $ruolo_nome;
+    if (!$is_super_admin && $tenant_id === null) {
+        $stmtTenant = $pdo->prepare("SELECT tenant_id FROM utenti WHERE id = :uid LIMIT 1");
+        $stmtTenant->execute(['uid' => $utente_id]);
+        $tenantValue = $stmtTenant->fetchColumn();
+        $tenant_id = $tenantValue !== false ? (int)$tenantValue : null;
+    }
+    if ($tenant_id !== null) {
+        $_SESSION['tenant_id'] = $tenant_id;
+    }
 
-    $sql_quiz = "SELECT * FROM quiz_risposte WHERE utente_id = :utente_id LIMIT 1";
+    $sql_quiz = "SELECT * FROM quiz_risposte WHERE utente_id = :utente_id AND tenant_id = :tenant_id LIMIT 1";
     $stmt_quiz = $pdo->prepare($sql_quiz);
-    $stmt_quiz->execute(['utente_id' => $utente_id]);
+    $stmt_quiz->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
     $quiz_completato = $stmt_quiz->fetch();
     
-    $sql_piano = "SELECT * FROM piani_allenamento WHERE utente_id = :utente_id AND stato = 'attivo' LIMIT 1";
+    $sql_piano = "SELECT * FROM piani_allenamento WHERE utente_id = :utente_id AND tenant_id = :tenant_id AND stato = 'attivo' LIMIT 1";
     $stmt_piano = $pdo->prepare($sql_piano);
-    $stmt_piano->execute(['utente_id' => $utente_id]);
+    $stmt_piano->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
     $piano_attivo = $stmt_piano->fetch();
 
     $stats_admin = [
@@ -51,12 +65,20 @@ try {
     ];
 
     if ($ruolo_nome === 'amministratore' || $ruolo_nome === 'allenatore') {
-        $stmtCount = $pdo->query("SELECT ur.ruolo_id, COUNT(*) AS totale FROM utente_ruolo ur GROUP BY ur.ruolo_id");
+        $stmtCount = $pdo->prepare("SELECT ur.ruolo_id, COUNT(*) AS totale FROM utente_ruolo ur INNER JOIN utenti u ON u.id = ur.utente_id WHERE u.tenant_id = :tenant_id GROUP BY ur.ruolo_id");
+        $stmtCount->execute(['tenant_id' => $tenant_id]);
         while ($row = $stmtCount->fetch()) {
             if ((int)$row['ruolo_id'] === 1) $stats_admin['utenti'] = (int)$row['totale'];
             if ((int)$row['ruolo_id'] === 2) $stats_admin['allenatori'] = (int)$row['totale'];
             if ((int)$row['ruolo_id'] === 3) $stats_admin['amministratori'] = (int)$row['totale'];
         }
+    }
+
+    $tenant_nome = null;
+    if ($tenant_id !== null) {
+        $stmtTenantName = $pdo->prepare("SELECT nome FROM tenants WHERE id = :tenant_id LIMIT 1");
+        $stmtTenantName->execute(['tenant_id' => $tenant_id]);
+        $tenant_nome = $stmtTenantName->fetchColumn() ?: null;
     }
     
 } catch(PDOException $e) {
@@ -137,6 +159,9 @@ try {
             <div class="user-section">
                 <span><strong><?php echo htmlspecialchars(trim(($_SESSION['nome'] ?? '') . ' ' . ($_SESSION['cognome'] ?? ''))); ?></strong></span>
                 <span class="badge"><?php echo htmlspecialchars(ucfirst($ruolo_nome)); ?> (<?php echo (int)$ruolo_id; ?>)</span>
+                <?php if ($tenant_nome): ?>
+                    <span class="badge">Tenant: <?php echo htmlspecialchars($tenant_nome); ?></span>
+                <?php endif; ?>
                 <a href="logout.php" class="logout-btn">Esci</a>
             </div>
         </div>
@@ -155,6 +180,8 @@ try {
                 <button class="tab" onclick="switchTab('classifica')">🏆 Classifica</button>
             <?php elseif ($ruolo_nome === 'amministratore'): ?>
                 <button class="tab" onclick="switchTab('admin')">🛠️ Admin</button>
+            <?php elseif ($ruolo_nome === 'super_admin'): ?>
+                <button class="tab" onclick="switchTab('superadmin')">🏢 Palestre</button>
             <?php endif; ?>
         </div>
         
@@ -262,6 +289,12 @@ try {
                     </div>
                 </div>
             <?php endif; ?>
+            <?php if ($ruolo_nome === 'super_admin'): ?>
+                <div class="card">
+                    <h2>Super Admin</h2>
+                    <p>Da qui puoi creare, attivare e assegnare palestre senza toccare i dati di un altro tenant.</p>
+                </div>
+            <?php endif; ?>
         </div>
         
         <?php if ($ruolo_nome === 'utente'): ?>
@@ -327,7 +360,32 @@ try {
                     <li>1 = utente</li>
                     <li>2 = allenatore</li>
                     <li>3 = amministratore</li>
+                    <li>4 = super_admin</li>
                 </ul>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($ruolo_nome === 'super_admin'): ?>
+        <div id="superadmin" class="tab-content">
+            <div class="card">
+                <h2>🏢 Gestione Palestre</h2>
+                <form class="quiz-form" onsubmit="createTenant(event)">
+                    <div>
+                        <label><strong>Nome palestra</strong></label>
+                        <input type="text" id="tenant_nome" placeholder="Es. Palestra Roma Centro" required>
+                    </div>
+                    <div>
+                        <label><strong>Slug</strong></label>
+                        <input type="text" id="tenant_slug" placeholder="es. palestra-roma-centro">
+                    </div>
+                    <button class="btn" type="submit">➕ Crea palestra</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Palestre registrate</h2>
+                <div id="tenants-container">Caricamento...</div>
             </div>
         </div>
         <?php endif; ?>
@@ -401,6 +459,15 @@ try {
     <script>
         const ruoloCorrente = '<?php echo addslashes($ruolo_nome); ?>';
 
+        function slugify(value) {
+            return value
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-');
+        }
+
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -411,6 +478,7 @@ try {
             if (tabName === 'progressi') loadProgressi();
             if (tabName === 'amici') loadAmici();
             if (tabName === 'classifica') loadClassifiche();
+            if (tabName === 'superadmin') loadTenants();
         }
         
         function openModal(modalId) { document.getElementById(modalId).classList.add('active'); }
@@ -540,6 +608,68 @@ try {
                     });
                     document.getElementById('classifica-mondiale').innerHTML = html;
                 });
+        }
+
+        function loadTenants() {
+            fetch('api/tenants.php?action=list')
+                .then(r => r.json())
+                .then(d => {
+                    if (!d.success) {
+                        document.getElementById('tenants-container').innerHTML = '<p>Errore nel caricamento delle palestre.</p>';
+                        return;
+                    }
+
+                    let html = '';
+                    d.tenants.forEach(t => {
+                        html += `<div style="padding:12px;background:#f5f5f5;margin:8px 0;border-radius:5px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                            <div>
+                                <strong>${t.nome}</strong><br>
+                                <small>${t.slug} | utenti: ${t.utenti}</small>
+                            </div>
+                            <button class="btn btn-secondary" onclick="activateTenant(${t.id})">Attiva</button>
+                        </div>`;
+                    });
+
+                    document.getElementById('tenants-container').innerHTML = html || '<p>Nessuna palestra creata.</p>';
+                });
+        }
+
+        function createTenant(e) {
+            e.preventDefault();
+            const nome = document.getElementById('tenant_nome').value.trim();
+            const slugInput = document.getElementById('tenant_slug').value.trim();
+            const payload = {
+                nome,
+                slug: slugInput || slugify(nome)
+            };
+
+            fetch('api/tenants.php?action=create', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(r => r.json()).then(d => {
+                if (d.success) {
+                    document.getElementById('tenant_nome').value = '';
+                    document.getElementById('tenant_slug').value = '';
+                    loadTenants();
+                } else {
+                    alert('❌ ' + (d.error || 'Errore creazione palestra'));
+                }
+            });
+        }
+
+        function activateTenant(tenantId) {
+            fetch('api/tenants.php?action=activate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({tenant_id: tenantId})
+            }).then(r => r.json()).then(d => {
+                if (d.success) {
+                    location.reload();
+                } else {
+                    alert('❌ ' + (d.error || 'Impossibile attivare la palestra'));
+                }
+            });
         }
         
         document.addEventListener('DOMContentLoaded', () => {

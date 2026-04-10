@@ -2,16 +2,7 @@
 header("Content-Type: application/json");
 require_once '../database.php';
 require_once '../JWT/jwt_helper.php';
-
-function roleNameFromId($roleId) {
-    $map = [
-        1 => 'utente',
-        2 => 'allenatore',
-        3 => 'amministratore'
-    ];
-
-    return $map[(int)$roleId] ?? 'utente';
-}
+require_once '../tenant_helper.php';
 
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
 $token = str_replace('Bearer ', '', $authHeader);
@@ -39,6 +30,7 @@ if (!$userData || empty($userData['user_id'])) {
 $userId = (int)$userData['user_id'];
 $roleId = isset($userData['role_id']) ? (int)$userData['role_id'] : null;
 $roleName = null;
+$tenantId = homeworkoutCurrentTenantId($userData);
 
 try {
     if ($roleId === null || $roleId <= 0) {
@@ -49,13 +41,14 @@ try {
 
     $stmtRoleName = $pdo->prepare("SELECT nome_ruolo FROM ruoli WHERE id = :rid LIMIT 1");
     $stmtRoleName->execute(['rid' => $roleId]);
-    $roleName = $stmtRoleName->fetchColumn() ?: roleNameFromId($roleId);
+    $roleName = $stmtRoleName->fetchColumn() ?: homeworkoutRoleNameFromId($roleId);
 
     echo json_encode([
         'success' => true,
         'user_id' => $userId,
         'role_id' => $roleId,
         'role_name' => $roleName,
+        'tenant_id' => $tenantId,
         'dashboard' => $roleName
     ]);
 } catch (Exception $e) {

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../database.php';
+require_once '../tenant_helper.php';
 
 if (!isset($_SESSION['utente_id'])) {
     echo json_encode(['error' => 'Non autenticato']);
@@ -8,6 +9,12 @@ if (!isset($_SESSION['utente_id'])) {
 }
 
 $utente_id = $_SESSION['utente_id'];
+$tenant_id = homeworkoutCurrentTenantId();
+
+if ($tenant_id === null) {
+    echo json_encode(['error' => 'Tenant non disponibile']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
@@ -19,12 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     try {
         // Salva risposte quiz
-        $sql = "INSERT INTO quiz_risposte (utente_id, eta, livello_fitness, obiettivo, orario_notifica, completato) 
-                VALUES (:utente_id, :eta, :livello, :obiettivo, :orario, 1)
+        $sql = "INSERT INTO quiz_risposte (tenant_id, utente_id, eta, livello_fitness, obiettivo, orario_notifica, completato) 
+            VALUES (:tenant_id, :utente_id, :eta, :livello, :obiettivo, :orario, 1)
                 ON DUPLICATE KEY UPDATE eta=:eta, livello_fitness=:livello, obiettivo=:obiettivo, orario_notifica=:orario";
         
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
+            'tenant_id' => $tenant_id,
             'utente_id' => $utente_id,
             'eta' => $eta,
             'livello' => $livello,
@@ -37,10 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $data_fine = date('Y-m-d', strtotime('+28 days'));
         $difficolta = ($livello === 'principiante') ? 2 : (($livello === 'intermedio') ? 3 : 4);
         
-        $sql_piano = "INSERT INTO piani_allenamento (utente_id, data_inizio, data_fine, difficolta, stato) 
-                      VALUES (:utente_id, :inizio, :fine, :diff, 'attivo')";
+        $sql_piano = "INSERT INTO piani_allenamento (tenant_id, utente_id, data_inizio, data_fine, difficolta, stato) 
+                      VALUES (:tenant_id, :utente_id, :inizio, :fine, :diff, 'attivo')";
         $stmt_piano = $pdo->prepare($sql_piano);
         $stmt_piano->execute([
+            'tenant_id' => $tenant_id,
             'utente_id' => $utente_id,
             'inizio' => $data_inizio,
             'fine' => $data_fine,
@@ -87,10 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ex = $esercizi[$ex_idx];
             $moltiplicatore = 1.0 + (floor(($giorno - 1) / 7) * 0.15);
             
-            $sql_ex = "INSERT INTO esercizi_piano (piano_id, nome_esercizio, descrizione, ripetizioni, serie, giorno, difficolta_moltiplicatore) 
-                       VALUES (:piano_id, :nome, :desc, :rip, :serie, :giorno, :molt)";
+            $sql_ex = "INSERT INTO esercizi_piano (tenant_id, piano_id, nome_esercizio, descrizione, ripetizioni, serie, giorno, difficolta_moltiplicatore) 
+                       VALUES (:tenant_id, :piano_id, :nome, :desc, :rip, :serie, :giorno, :molt)";
             $stmt_ex = $pdo->prepare($sql_ex);
             $stmt_ex->execute([
+                'tenant_id' => $tenant_id,
                 'piano_id' => $piano_id,
                 'nome' => $ex[0],
                 'desc' => $ex[1],

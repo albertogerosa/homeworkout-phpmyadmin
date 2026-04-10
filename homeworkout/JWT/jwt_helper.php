@@ -7,7 +7,7 @@ function base64UrlEncode($data) {
 }
 
 // Genera un JWT con scadenza personalizzabile (default 5 minuti per la consegna)
-function generateJWT($userId, $expiryMinutes = 5, $roleId = null) {
+function generateJWT($userId, $expiryMinutes = 5, $roleId = null, $tenantId = null, $tenantName = null) {
     $payloadData = [
         'user_id' => $userId,
         'iat' => time(),
@@ -16,6 +16,14 @@ function generateJWT($userId, $expiryMinutes = 5, $roleId = null) {
 
     if ($roleId !== null) {
         $payloadData['role_id'] = (int)$roleId;
+    }
+
+    if ($tenantId !== null) {
+        $payloadData['tenant_id'] = (int)$tenantId;
+    }
+
+    if ($tenantName !== null && $tenantName !== '') {
+        $payloadData['tenant_name'] = $tenantName;
     }
 
     $header = base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
@@ -40,7 +48,7 @@ function validateJWT($jwt) {
     if ($signatureCheck !== $signatureProvided) return false;
 
     $payloadData = json_decode(base64_decode($payload), true);
-    if ($payloadData['exp'] < time()) return false; // Scaduto
+    if (!is_array($payloadData) || !isset($payloadData['exp']) || $payloadData['exp'] < time()) return false; // Scaduto
 
     return $payloadData;
 }

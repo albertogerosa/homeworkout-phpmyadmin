@@ -2,6 +2,15 @@
 session_start();
 require_once 'database.php';
 
+$defaultTenantId = 1;
+try {
+    $stmtTenant = $pdo->prepare("SELECT id FROM tenants WHERE slug = :slug LIMIT 1");
+    $stmtTenant->execute(['slug' => 'demo-homeworkout']);
+    $defaultTenantId = (int)($stmtTenant->fetchColumn() ?: 1);
+} catch (PDOException $e) {
+    $defaultTenantId = 1;
+}
+
 $messaggio = "";
 $tipo_messaggio = "";
 
@@ -38,10 +47,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             } else {
                 // Inserimento nuovo utente
                 $password_hash = password_hash($password, PASSWORD_BCRYPT);
-                $sql_insert = "INSERT INTO utenti (nome, cognome, email, password, livello) 
-                               VALUES (:nome, :cognome, :email, :password, 'principiante')";
+                $sql_insert = "INSERT INTO utenti (tenant_id, nome, cognome, email, password, livello) 
+                               VALUES (:tenant_id, :nome, :cognome, :email, :password, 'principiante')";
                 $stmt_insert = $pdo->prepare($sql_insert);
                 $stmt_insert->execute([
+                    ':tenant_id' => $defaultTenantId,
                     ':nome' => $nome,
                     ':cognome' => $cognome,
                     ':email' => $email,

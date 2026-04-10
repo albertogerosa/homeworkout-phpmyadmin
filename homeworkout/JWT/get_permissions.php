@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 require_once '../database.php';
 require_once 'jwt_helper.php';
+require_once '../tenant_helper.php';
 
 // Estraiamo il token dall'header Authorization (Bearer <token>)
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
@@ -16,6 +17,8 @@ if (!$userData) {
 }
 
 try {
+    $tenantId = homeworkoutCurrentTenantId($userData);
+
     // Query per ottenere i permessi associati ai ruoli dell'utente
     $sql = "SELECT p.nome_permesso 
             FROM permessi p
@@ -29,6 +32,7 @@ try {
 
     echo json_encode([
         "user_id" => $userData['user_id'],
+        "tenant_id" => $tenantId,
         "permissions" => $permissions,
         "valid_until" => date('H:i:s', $userData['exp'])
     ]);

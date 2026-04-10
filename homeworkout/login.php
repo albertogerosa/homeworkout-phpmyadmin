@@ -6,6 +6,7 @@ error_reporting(E_ALL);
 
 session_start();
 require_once 'database.php';
+require_once __DIR__ . '/tenant_helper.php';
 
 // Assicurati che il percorso sia corretto. 
 // Se login.php è nella root e jwt_helper è in /JWT/
@@ -26,7 +27,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if (!empty($email) && !empty($password)) {
         try {
-            $stmt = $pdo->prepare("SELECT * FROM utenti WHERE email = :email");
+            $stmt = $pdo->prepare("SELECT * FROM utenti WHERE email = :email LIMIT 1");
             $stmt->execute(['email' => $email]);
             $utente = $stmt->fetch();
 
@@ -41,10 +42,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $ruolo = $stmtRuolo->fetch();
 
                 $ruoloId = (int)($ruolo['ruolo_id'] ?? 1);
-                $ruoloNome = $ruolo['nome_ruolo'] ?? 'utente';
+                $ruoloNome = $ruolo['nome_ruolo'] ?? homeworkoutRoleNameFromId($ruoloId);
+                $tenantId = isset($utente['tenant_id']) ? (int)$utente['tenant_id'] : null;
+                $tenantName = null;
+
+                if ($tenantId !== null) {
+                    $stmtTenant = $pdo->prepare("SELECT nome FROM tenants WHERE id = :tenant_id LIMIT 1");
+                    $stmtTenant->execute(['tenant_id' => $tenantId]);
+                    $tenantName = $stmtTenant->fetchColumn() ?: null;
+                }
 
                 // Generazione Token
-                $accessToken = generateJWT($utente['id'], 5, $ruoloId);
+                $accessToken = generateJWT($utente['id'], 5, $ruoloId, $tenantId, $tenantName);
                 $refreshTokenStr = bin2hex(random_bytes(32));
                 $scadenzaRefresh = date('Y-m-d H:i:s', time() + (10 * 60));
 
@@ -57,13 +66,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 ]);
 
                 // Sessioni
-                $_SESSION['utente_id'] = $utente['id'];
-                $_SESSION['access_token'] = $accessToken;
-                $_SESSION['refresh_token'] = $refreshTokenStr;
+                homeworkoutSetAuthSession((int)$utente['id'], $tenantId, $ruoloId, $ruoloNome, $accessToken, $refreshTokenStr);
                 $_SESSION['nome'] = $utente['nome'];
                 $_SESSION['cognome'] = $utente['cognome'] ?? '';
-                $_SESSION['ruolo_id'] = $ruoloId;
-                $_SESSION['ruolo_nome'] = $ruoloNome;
+                $_SESSION['tenant_nome'] = $tenantName;
 
                 header("Location: dashboard.php");
                 exit;
