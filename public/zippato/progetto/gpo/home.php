@@ -10,7 +10,23 @@
     <div class="mb-3">
         <h3>Diagramma delle Classi</h3>
         <ul>
-            <li><a href="diagramma_classi/index.php">Visualizza diagramma delle classi</a></li>
+            <li><a href="diagramma classi/index.php">Visualizza diagramma delle classi</a></li>
+        </ul>
+    </div>
+    <div class="mb-3">
+        <h3>Homeworkout</h3>
+        <ul>
+            <li><a href="manuale_homeworkout.php">Manuale utente Homeworkout</a></li>
+            <li><a href="../informatica/homeworkout_mockup.php">Documentazione tecnica (rotte e API)</a></li>
+        </ul>
+    </div>
+    <div class="mb-4">
+        <h3>Documentazione Progetti GPO</h3>
+        <p class="mb-2">In questa sezione trovi tutta la documentazione disponibile per i progetti sviluppati in GPO.</p>
+        <ul class="mb-0">
+            <li><a href="manuale_homeworkout.php">Guida utente Homeworkout</a></li>
+            <li><a href="../informatica/homeworkout_mockup.php">Guida tecnica Homeworkout (pagine, endpoint e JWT)</a></li>
+            <li><a href="diagramma classi/index.php">Diagramma delle classi del progetto</a></li>
         </ul>
     </div>
     <a href="../../home.html" class="btn btn-secondary">Torna alla Home</a>

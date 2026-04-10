@@ -7,14 +7,20 @@ function base64UrlEncode($data) {
 }
 
 // Genera un JWT con scadenza personalizzabile (default 5 minuti per la consegna)
-function generateJWT($userId, $expiryMinutes = 5) {
-    $header = base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
-    
-    $payload = base64UrlEncode(json_encode([
+function generateJWT($userId, $expiryMinutes = 5, $roleId = null) {
+    $payloadData = [
         'user_id' => $userId,
         'iat' => time(),
         'exp' => time() + ($expiryMinutes * 60)
-    ]));
+    ];
+
+    if ($roleId !== null) {
+        $payloadData['role_id'] = (int)$roleId;
+    }
+
+    $header = base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
+    
+    $payload = base64UrlEncode(json_encode($payloadData));
 
     $signature = base64UrlEncode(hash_hmac('sha256', "$header.$payload", JWT_SECRET, true));
     return "$header.$payload.$signature";

@@ -21,6 +21,19 @@ try {
 // Funzione per creare tabelle mancanti
 function createTables($pdo) {
     $tables = [
+        "CREATE TABLE IF NOT EXISTS ruoli (
+            id INT PRIMARY KEY,
+            nome_ruolo VARCHAR(50) NOT NULL UNIQUE,
+            descrizione TEXT NULL
+        )",
+
+        "CREATE TABLE IF NOT EXISTS utente_ruolo (
+            utente_id INT PRIMARY KEY,
+            ruolo_id INT NOT NULL,
+            FOREIGN KEY (utente_id) REFERENCES utenti(id) ON DELETE CASCADE,
+            FOREIGN KEY (ruolo_id) REFERENCES ruoli(id) ON DELETE RESTRICT
+        )",
+
         "CREATE TABLE IF NOT EXISTS quiz_risposte (
             id INT PRIMARY KEY AUTO_INCREMENT,
             utente_id INT NOT NULL,
@@ -108,6 +121,15 @@ function createTables($pdo) {
         } catch (PDOException $e) {
             // Tabella già esiste
         }
+    }
+
+    try {
+        $pdo->exec("INSERT IGNORE INTO ruoli (id, nome_ruolo, descrizione) VALUES
+            (1, 'utente', 'Utente standard'),
+            (2, 'allenatore', 'Coach/allenatore'),
+            (3, 'amministratore', 'Amministratore piattaforma')");
+    } catch (PDOException $e) {
+        // Seed ruoli già eseguito
     }
 }
 

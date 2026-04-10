@@ -13,8 +13,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
-        $accessToken = generateJWT($user['id'], 5); // Scadenza 5 min come da consegna
-        $refreshToken = generateJWT($user['id'], 10); // Refresh token 10 min
+        $stmtRole = $pdo->prepare("SELECT ruolo_id FROM utente_ruolo WHERE utente_id = :uid LIMIT 1");
+        $stmtRole->execute(['uid' => $user['id']]);
+        $ruoloId = (int)($stmtRole->fetchColumn() ?: 1);
+
+        $accessToken = generateJWT($user['id'], 5, $ruoloId); // Scadenza 5 min come da consegna
+        $refreshToken = generateJWT($user['id'], 10, $ruoloId); // Refresh token 10 min
 
         echo json_encode([
             "status" => "success",

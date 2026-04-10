@@ -23,6 +23,13 @@
     <div class="diagram-container">
         <img src="../../IMG/classi.png" alt="Diagramma delle Classi">
     </div>
+    <div class="card p-3 mt-4">
+        <h2 class="h5">Documentazione collegata</h2>
+        <ul class="mb-0">
+            <li><a href="../manuale_homeworkout.php">Manuale utente Homeworkout</a></li>
+            <li><a href="../../informatica/homeworkout_mockup.php">Documentazione tecnica Homeworkout (rotte e API)</a></li>
+        </ul>
+    </div>
     <a href="../home.php" class="btn btn-secondary mt-3">Torna ai progetti di GPO</a>
 </body>
 </html>

@@ -32,8 +32,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             if ($utente && password_verify($password, $utente['password'])) {
                 
+                $stmtRuolo = $pdo->prepare("SELECT ur.ruolo_id, r.nome_ruolo
+                                            FROM utente_ruolo ur
+                                            LEFT JOIN ruoli r ON r.id = ur.ruolo_id
+                                            WHERE ur.utente_id = :uid
+                                            LIMIT 1");
+                $stmtRuolo->execute(['uid' => $utente['id']]);
+                $ruolo = $stmtRuolo->fetch();
+
+                $ruoloId = (int)($ruolo['ruolo_id'] ?? 1);
+                $ruoloNome = $ruolo['nome_ruolo'] ?? 'utente';
+
                 // Generazione Token
-                $accessToken = generateJWT($utente['id'], 5);
+                $accessToken = generateJWT($utente['id'], 5, $ruoloId);
                 $refreshTokenStr = bin2hex(random_bytes(32));
                 $scadenzaRefresh = date('Y-m-d H:i:s', time() + (10 * 60));
 
@@ -50,6 +61,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $_SESSION['access_token'] = $accessToken;
                 $_SESSION['refresh_token'] = $refreshTokenStr;
                 $_SESSION['nome'] = $utente['nome'];
+                $_SESSION['cognome'] = $utente['cognome'] ?? '';
+                $_SESSION['ruolo_id'] = $ruoloId;
+                $_SESSION['ruolo_nome'] = $ruoloNome;
 
                 header("Location: dashboard.php");
                 exit;

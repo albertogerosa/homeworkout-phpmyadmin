@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'database.php';
+require_once __DIR__ . '/JWT/jwt_helper.php';
 
 if (!isset($_SESSION['utente_id'])) {
     header("Location: login.php");
@@ -8,8 +9,31 @@ if (!isset($_SESSION['utente_id'])) {
 }
 
 $utente_id = $_SESSION['utente_id'];
+$ruolo_id = 0;
+$ruolo_nome = 'utente';
+
+$token = $_SESSION['access_token'] ?? '';
+if (!empty($token)) {
+    $tokenData = validateJWT($token);
+    if ($tokenData && !empty($tokenData['role_id'])) {
+        $ruolo_id = (int)$tokenData['role_id'];
+    }
+}
 
 try {
+    if ($ruolo_id <= 0) {
+        $stmtRuolo = $pdo->prepare("SELECT ruolo_id FROM utente_ruolo WHERE utente_id = :utente_id LIMIT 1");
+        $stmtRuolo->execute(['utente_id' => $utente_id]);
+        $ruolo_id = (int)($stmtRuolo->fetchColumn() ?: 1);
+    }
+
+    $stmtNomeRuolo = $pdo->prepare("SELECT nome_ruolo FROM ruoli WHERE id = :rid LIMIT 1");
+    $stmtNomeRuolo->execute(['rid' => $ruolo_id]);
+    $ruolo_nome = $stmtNomeRuolo->fetchColumn() ?: 'utente';
+
+    $_SESSION['ruolo_id'] = $ruolo_id;
+    $_SESSION['ruolo_nome'] = $ruolo_nome;
+
     $sql_quiz = "SELECT * FROM quiz_risposte WHERE utente_id = :utente_id LIMIT 1";
     $stmt_quiz = $pdo->prepare($sql_quiz);
     $stmt_quiz->execute(['utente_id' => $utente_id]);
@@ -19,6 +43,21 @@ try {
     $stmt_piano = $pdo->prepare($sql_piano);
     $stmt_piano->execute(['utente_id' => $utente_id]);
     $piano_attivo = $stmt_piano->fetch();
+
+    $stats_admin = [
+        'utenti' => 0,
+        'allenatori' => 0,
+        'amministratori' => 0
+    ];
+
+    if ($ruolo_nome === 'amministratore' || $ruolo_nome === 'allenatore') {
+        $stmtCount = $pdo->query("SELECT ur.ruolo_id, COUNT(*) AS totale FROM utente_ruolo ur GROUP BY ur.ruolo_id");
+        while ($row = $stmtCount->fetch()) {
+            if ((int)$row['ruolo_id'] === 1) $stats_admin['utenti'] = (int)$row['totale'];
+            if ((int)$row['ruolo_id'] === 2) $stats_admin['allenatori'] = (int)$row['totale'];
+            if ((int)$row['ruolo_id'] === 3) $stats_admin['amministratori'] = (int)$row['totale'];
+        }
+    }
     
 } catch(PDOException $e) {
     die("Errore: " . $e->getMessage());
@@ -96,7 +135,8 @@ try {
         <div class="header-flex">
             <h1>🏋️ HomeWorkout</h1>
             <div class="user-section">
-                <span><strong><?php echo htmlspecialchars($_SESSION['nome'] . ' ' . $_SESSION['cognome']); ?></strong></span>
+                <span><strong><?php echo htmlspecialchars(trim(($_SESSION['nome'] ?? '') . ' ' . ($_SESSION['cognome'] ?? ''))); ?></strong></span>
+                <span class="badge"><?php echo htmlspecialchars(ucfirst($ruolo_nome)); ?> (<?php echo (int)$ruolo_id; ?>)</span>
                 <a href="logout.php" class="logout-btn">Esci</a>
             </div>
         </div>
@@ -105,72 +145,126 @@ try {
     <div class="container">
         <div class="tabs">
             <button class="tab active" onclick="switchTab('home')">🏠 Home</button>
-            <button class="tab" onclick="switchTab('oggi')">💪 Oggi</button>
-            <button class="tab" onclick="switchTab('progressi')">📊 Progressi</button>
-            <button class="tab" onclick="switchTab('amici')">👥 Amici</button>
-            <button class="tab" onclick="switchTab('classifica')">🏆 Classifica</button>
+            <?php if ($ruolo_nome === 'utente'): ?>
+                <button class="tab" onclick="switchTab('oggi')">💪 Oggi</button>
+                <button class="tab" onclick="switchTab('progressi')">📊 Progressi</button>
+                <button class="tab" onclick="switchTab('amici')">👥 Amici</button>
+                <button class="tab" onclick="switchTab('classifica')">🏆 Classifica</button>
+            <?php elseif ($ruolo_nome === 'allenatore'): ?>
+                <button class="tab" onclick="switchTab('progressi')">📊 Progressi</button>
+                <button class="tab" onclick="switchTab('classifica')">🏆 Classifica</button>
+            <?php elseif ($ruolo_nome === 'amministratore'): ?>
+                <button class="tab" onclick="switchTab('admin')">🛠️ Admin</button>
+            <?php endif; ?>
         </div>
         
         <!-- TAB: HOME -->
         <div id="home" class="tab-content active">
-            <div class="card">
-                <h2>Benvenuto, <?php echo htmlspecialchars($_SESSION['nome']); ?>!</h2>
-                <?php if (!$quiz_completato): ?>
-                    <p style="margin-bottom: 15px;">Rispondi al quiz per ricevere un piano allenamento personalizzato!</p>
-                    <button class="btn" onclick="openModal('quizModal')">📋 Inizia Quiz</button>
-                <?php else: ?>
-                    <p><strong>Livello:</strong> <?php echo ucfirst($quiz_completato['livello_fitness']); ?></p>
-                    <p><strong>Obiettivo:</strong> <?php echo htmlspecialchars($quiz_completato['obiettivo']); ?></p>
-                    <p><strong>Orario allenamento:</strong> <?php echo $quiz_completato['orario_notifica']; ?></p>
-                    <button class="btn btn-secondary" onclick="openModal('quizModal')" style="margin-top: 15px;">Modifica Quiz</button>
+            <?php if ($ruolo_nome === 'utente'): ?>
+                <div class="card">
+                    <h2>Benvenuto, <?php echo htmlspecialchars($_SESSION['nome']); ?>!</h2>
+                    <?php if (!$quiz_completato): ?>
+                        <p style="margin-bottom: 15px;">Rispondi al quiz per ricevere un piano allenamento personalizzato!</p>
+                        <button class="btn" onclick="openModal('quizModal')">📋 Inizia Quiz</button>
+                    <?php else: ?>
+                        <p><strong>Livello:</strong> <?php echo ucfirst($quiz_completato['livello_fitness']); ?></p>
+                        <p><strong>Obiettivo:</strong> <?php echo htmlspecialchars($quiz_completato['obiettivo']); ?></p>
+                        <p><strong>Orario allenamento:</strong> <?php echo $quiz_completato['orario_notifica']; ?></p>
+                        <button class="btn btn-secondary" onclick="openModal('quizModal')" style="margin-top: 15px;">Modifica Quiz</button>
+                    <?php endif; ?>
+                </div>
+                
+                <?php if ($piano_attivo): ?>
+                <div class="card">
+                    <h2>📅 Piano Attuale</h2>
+                    <div class="grid">
+                        <div class="stat-box">
+                            <div class="numero" id="giorni_rimanenti">-</div>
+                            <div class="label">Giorni Rimanenti</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero"><?php echo $piano_attivo['difficolta']; ?></div>
+                            <div class="label">Difficoltà</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero" id="esercizi_completati">0</div>
+                            <div class="label">Esercizi Completati</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <p><strong>Dal:</strong> <?php echo date('d/m/Y', strtotime($piano_attivo['data_inizio'])); ?> <strong>Al:</strong> <?php echo date('d/m/Y', strtotime($piano_attivo['data_fine'])); ?></p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="plan_progress"></div>
+                        </div>
+                    </div>
+                </div>
                 <?php endif; ?>
-            </div>
-            
-            <?php if ($piano_attivo): ?>
-            <div class="card">
-                <h2>📅 Piano Attuale</h2>
-                <div class="grid">
-                    <div class="stat-box">
-                        <div class="numero" id="giorni_rimanenti">-</div>
-                        <div class="label">Giorni Rimanenti</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="numero"><?php echo $piano_attivo['difficolta']; ?></div>
-                        <div class="label">Difficoltà</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="numero" id="esercizi_completati">0</div>
-                        <div class="label">Esercizi Completati</div>
-                    </div>
-                </div>
-                <div style="margin-top: 15px;">
-                    <p><strong>Dal:</strong> <?php echo date('d/m/Y', strtotime($piano_attivo['data_inizio'])); ?> <strong>Al:</strong> <?php echo date('d/m/Y', strtotime($piano_attivo['data_fine'])); ?></p>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="plan_progress"></div>
+                
+                <div class="card">
+                    <h2>📈 Statistiche Generali</h2>
+                    <div class="grid">
+                        <div class="stat-box">
+                            <div class="numero" id="giorni_allenamento">0</div>
+                            <div class="label">Giorni Allenamento</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero" id="ripetizioni_totali">0</div>
+                            <div class="label">Ripetizioni Totali</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero" id="difficolta_media">1.0x</div>
+                            <div class="label">Difficoltà Media</div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            <?php elseif ($ruolo_nome === 'allenatore'): ?>
+                <div class="card">
+                    <h2>Dashboard Allenatore</h2>
+                    <p>Visualizzi una dashboard dedicata al monitoraggio degli utenti e delle classifiche.</p>
+                </div>
+                <div class="card">
+                    <h2>📌 Riepilogo Ruoli</h2>
+                    <div class="grid">
+                        <div class="stat-box">
+                            <div class="numero"><?php echo (int)$stats_admin['utenti']; ?></div>
+                            <div class="label">Utenti</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero"><?php echo (int)$stats_admin['allenatori']; ?></div>
+                            <div class="label">Allenatori</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero"><?php echo (int)$stats_admin['amministratori']; ?></div>
+                            <div class="label">Amministratori</div>
+                        </div>
+                    </div>
+                </div>
+            <?php else: ?>
+                <div class="card">
+                    <h2>Dashboard Amministratore</h2>
+                    <p>Interfaccia amministrativa attiva: gestione ruoli numerici e supervisione piattaforma.</p>
+                </div>
+                <div class="card">
+                    <h2>📌 Totale per Ruolo</h2>
+                    <div class="grid">
+                        <div class="stat-box">
+                            <div class="numero"><?php echo (int)$stats_admin['utenti']; ?></div>
+                            <div class="label">Ruolo 1 - Utente</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero"><?php echo (int)$stats_admin['allenatori']; ?></div>
+                            <div class="label">Ruolo 2 - Allenatore</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="numero"><?php echo (int)$stats_admin['amministratori']; ?></div>
+                            <div class="label">Ruolo 3 - Amministratore</div>
+                        </div>
+                    </div>
+                </div>
             <?php endif; ?>
-            
-            <div class="card">
-                <h2>📈 Statistiche Generali</h2>
-                <div class="grid">
-                    <div class="stat-box">
-                        <div class="numero" id="giorni_allenamento">0</div>
-                        <div class="label">Giorni Allenamento</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="numero" id="ripetizioni_totali">0</div>
-                        <div class="label">Ripetizioni Totali</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="numero" id="difficolta_media">1.0x</div>
-                        <div class="label">Difficoltà Media</div>
-                    </div>
-                </div>
-            </div>
         </div>
         
+        <?php if ($ruolo_nome === 'utente'): ?>
         <!-- TAB: ESERCIZIO DI OGGI -->
         <div id="oggi" class="tab-content">
             <div class="card">
@@ -178,7 +272,9 @@ try {
                 <div id="esercizio-oggi-container">Caricamento...</div>
             </div>
         </div>
+        <?php endif; ?>
         
+        <?php if ($ruolo_nome === 'utente' || $ruolo_nome === 'allenatore'): ?>
         <!-- TAB: PROGRESSI -->
         <div id="progressi" class="tab-content">
             <div class="card">
@@ -191,7 +287,9 @@ try {
                 <div id="stats-container">Caricamento...</div>
             </div>
         </div>
+        <?php endif; ?>
         
+        <?php if ($ruolo_nome === 'utente'): ?>
         <!-- TAB: AMICI -->
         <div id="amici" class="tab-content">
             <div class="card">
@@ -202,7 +300,9 @@ try {
                 <button class="btn" onclick="openModal('cercaAmicoModal')" style="margin-top: 15px;">➕ Cerca Amico</button>
             </div>
         </div>
+        <?php endif; ?>
         
+        <?php if ($ruolo_nome === 'utente' || $ruolo_nome === 'allenatore'): ?>
         <!-- TAB: CLASSIFICA -->
         <div id="classifica" class="tab-content">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -216,6 +316,21 @@ try {
                 </div>
             </div>
         </div>
+        <?php endif; ?>
+
+        <?php if ($ruolo_nome === 'amministratore'): ?>
+        <div id="admin" class="tab-content">
+            <div class="card">
+                <h2>🛠️ Gestione Ruoli</h2>
+                <p>I ruoli nel database sono salvati solo come numeri:</p>
+                <ul style="margin-top: 10px; padding-left: 20px;">
+                    <li>1 = utente</li>
+                    <li>2 = allenatore</li>
+                    <li>3 = amministratore</li>
+                </ul>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
     
     <!-- MODAL: QUIZ -->
@@ -284,6 +399,8 @@ try {
     </div>
     
     <script>
+        const ruoloCorrente = '<?php echo addslashes($ruolo_nome); ?>';
+
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -426,14 +543,20 @@ try {
         }
         
         document.addEventListener('DOMContentLoaded', () => {
+            if (ruoloCorrente !== 'utente') return;
+
             fetch('api/progressi.php?action=totali')
                 .then(r => r.json())
                 .then(d => {
                     if (d.success) {
                         const t = d.totali;
-                        document.getElementById('giorni_allenamento').textContent = t.giorni_allenamento || 0;
-                        document.getElementById('ripetizioni_totali').textContent = t.ripetizioni_totali || 0;
-                        document.getElementById('difficolta_media').textContent = (t.difficolta_media || 1).toFixed(1) + 'x';
+                        const giorniEl = document.getElementById('giorni_allenamento');
+                        const repsEl = document.getElementById('ripetizioni_totali');
+                        const diffEl = document.getElementById('difficolta_media');
+
+                        if (giorniEl) giorniEl.textContent = t.giorni_allenamento || 0;
+                        if (repsEl) repsEl.textContent = t.ripetizioni_totali || 0;
+                        if (diffEl) diffEl.textContent = (t.difficolta_media || 1).toFixed(1) + 'x';
                     }
                 });
         });

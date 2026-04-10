@@ -18,8 +18,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $utente = $stmt->fetch();
 
     if ($utente) {
+        $stmtRole = $pdo->prepare("SELECT ruolo_id FROM utente_ruolo WHERE utente_id = :uid LIMIT 1");
+        $stmtRole->execute(['uid' => $utente['id']]);
+        $ruoloId = (int)($stmtRole->fetchColumn() ?: 1);
+
         // Genera un nuovo Access Token di 5 minuti
-        $newAccessToken = generateJWT($utente['id'], 5);
+        $newAccessToken = generateJWT($utente['id'], 5, $ruoloId);
         
         echo json_encode([
             "status" => "success",

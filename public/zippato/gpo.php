@@ -19,6 +19,15 @@
         <div class="project-card">
             <button class="btn btn-primary btn-lg w-100" data-bs-toggle="modal" data-bs-target="#diagrammaClassiModal">Diagramma delle Classi del Sito</button>
         </div>
+        <div class="project-card">
+            <a class="btn btn-outline-primary btn-lg w-100" href="progetto/gpo/manuale_homeworkout.php">Manuale Utente Homeworkout</a>
+        </div>
+        <div class="project-card">
+            <a class="btn btn-outline-success btn-lg w-100" href="progetto/informatica/homeworkout_mockup.php">Documentazione Tecnica Homeworkout (Rotte e API)</a>
+        </div>
+        <div class="project-card">
+            <a class="btn btn-outline-secondary btn-lg w-100" href="progetto/gpo/home.php">Apri pagina completa Progetti GPO</a>
+        </div>
     </div>
     <a href="../home.php" class="btn btn-secondary mt-3">Torna indietro</a>
 

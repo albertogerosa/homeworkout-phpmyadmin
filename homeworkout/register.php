@@ -47,6 +47,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     ':email' => $email,
                     ':password' => $password_hash
                 ]);
+
+                $nuovoUtenteId = (int)$pdo->lastInsertId();
+                $stmtRuolo = $pdo->prepare("INSERT INTO utente_ruolo (utente_id, ruolo_id) VALUES (:uid, 1)
+                                            ON DUPLICATE KEY UPDATE ruolo_id = VALUES(ruolo_id)");
+                $stmtRuolo->execute(['uid' => $nuovoUtenteId]);
                 
                 $messaggio = "Registrazione completata! Accedi con le tue credenziali.";
                 $tipo_messaggio = "success";
