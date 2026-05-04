@@ -30,8 +30,10 @@ sudo mariadb < /workspaces/codespaces-blank/schema.sql
 
 echo "📂 Setup directory Home Workout..."
 sudo mkdir -p /var/www/html/home-workout/api
-sudo cp /workspaces/codespaces-blank/*.php /var/www/html/home-workout/
-sudo cp /workspaces/codespaces-blank/api/*.php /var/www/html/home-workout/api/ 2>/dev/null || true
+sudo cp /workspaces/codespaces-blank/homeworkout/*.php /var/www/html/home-workout/
+sudo cp /workspaces/codespaces-blank/homeworkout/api/*.php /var/www/html/home-workout/api/ 2>/dev/null || true
+sudo mkdir -p /var/www/html/home-workout/JWT
+sudo cp /workspaces/codespaces-blank/homeworkout/JWT/*.php /var/www/html/home-workout/JWT/ 2>/dev/null || true
 sudo chown -R www-data:www-data /var/www/html/home-workout
 
 echo "🌐 Configurazione Apache per Home Workout..."

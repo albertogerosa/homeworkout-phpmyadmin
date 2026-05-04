@@ -54,6 +54,7 @@ if ($action === 'progressi_ultimi_7') {
 if ($action === 'totali') {
     try {
         $sql = "SELECT COUNT(DISTINCT DATE(data_allenamento)) as giorni_allenamento, 
+                COUNT(*) as esercizi_completati,
                 SUM(ripetizioni_fatte) as ripetizioni_totali,
                 AVG(difficolta_eseguita) as difficolta_media
             FROM progressi_dettaglio WHERE utente_id = :utente_id" . $tenantFilter;

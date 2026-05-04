@@ -65,6 +65,49 @@ if ($action === 'classifica_mondiale') {
     }
 }
 
+if ($action === 'cerca_utente') {
+    try {
+        $query = trim($_GET['q'] ?? '');
+        if ($query === '' || mb_strlen($query) < 2) {
+            echo json_encode(['success' => true, 'utenti' => []]);
+            exit;
+        }
+
+        $sql = "SELECT u.id, u.nome, u.cognome, u.email,
+                (
+                    SELECT a.stato
+                    FROM amicizie a
+                    WHERE a.tenant_id = :tenant_id
+                      AND ((a.utente_id = :utente_id AND a.amico_id = u.id)
+                           OR (a.amico_id = :utente_id AND a.utente_id = u.id))
+                    ORDER BY a.id DESC
+                    LIMIT 1
+                ) AS stato_amicizia
+                FROM utenti u
+                WHERE u.tenant_id = :tenant_id
+                  AND u.id <> :utente_id
+                  AND (
+                      u.nome LIKE :term
+                      OR u.cognome LIKE :term
+                      OR u.email LIKE :term
+                  )
+                ORDER BY u.nome ASC, u.cognome ASC
+                LIMIT 10";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            'tenant_id' => $tenant_id,
+            'utente_id' => $utente_id,
+            'term' => '%' . $query . '%'
+        ]);
+
+        echo json_encode(['success' => true, 'utenti' => $stmt->fetchAll()]);
+    } catch (PDOException $e) {
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($action === 'add_amico' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $data = json_decode(file_get_contents('php://input'), true);
@@ -81,6 +124,24 @@ if ($action === 'add_amico' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         
+        $stmtExisting = $pdo->prepare("SELECT id, stato FROM amicizie
+            WHERE tenant_id = :tenant_id
+              AND ((utente_id = :utente_id AND amico_id = :amico_id)
+               OR (utente_id = :amico_id AND amico_id = :utente_id))
+            ORDER BY id DESC
+            LIMIT 1");
+        $stmtExisting->execute([
+            'tenant_id' => $tenant_id,
+            'utente_id' => $utente_id,
+            'amico_id' => $amico_id
+        ]);
+        $existing = $stmtExisting->fetch();
+
+        if ($existing) {
+            echo json_encode(['success' => true, 'status' => $existing['stato']]);
+            exit;
+        }
+
         $sql = "INSERT INTO amicizie (tenant_id, utente_id, amico_id, stato) VALUES (:tenant_id, :utente_id, :amico_id, 'pending')";
         $stmt = $pdo->prepare($sql);
         $stmt->execute(['utente_id' => $utente_id, 'amico_id' => $amico_id] + $tenantParams);

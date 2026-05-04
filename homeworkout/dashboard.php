@@ -169,19 +169,19 @@ try {
     
     <div class="container">
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('home')">🏠 Home</button>
+            <button class="tab active" onclick="switchTab(event, 'home')">🏠 Home</button>
             <?php if ($ruolo_nome === 'utente'): ?>
-                <button class="tab" onclick="switchTab('oggi')">💪 Oggi</button>
-                <button class="tab" onclick="switchTab('progressi')">📊 Progressi</button>
-                <button class="tab" onclick="switchTab('amici')">👥 Amici</button>
-                <button class="tab" onclick="switchTab('classifica')">🏆 Classifica</button>
+                <button class="tab" onclick="switchTab(event, 'oggi')">💪 Oggi</button>
+                <button class="tab" onclick="switchTab(event, 'progressi')">📊 Progressi</button>
+                <button class="tab" onclick="switchTab(event, 'amici')">👥 Amici</button>
+                <button class="tab" onclick="switchTab(event, 'classifica')">🏆 Classifica</button>
             <?php elseif ($ruolo_nome === 'allenatore'): ?>
-                <button class="tab" onclick="switchTab('progressi')">📊 Progressi</button>
-                <button class="tab" onclick="switchTab('classifica')">🏆 Classifica</button>
+                <button class="tab" onclick="switchTab(event, 'progressi')">📊 Progressi</button>
+                <button class="tab" onclick="switchTab(event, 'classifica')">🏆 Classifica</button>
             <?php elseif ($ruolo_nome === 'amministratore'): ?>
-                <button class="tab" onclick="switchTab('admin')">🛠️ Admin</button>
+                <button class="tab" onclick="switchTab(event, 'admin')">🛠️ Admin</button>
             <?php elseif ($ruolo_nome === 'super_admin'): ?>
-                <button class="tab" onclick="switchTab('superadmin')">🏢 Palestre</button>
+                <button class="tab" onclick="switchTab(event, 'superadmin')">🏢 Palestre</button>
             <?php endif; ?>
         </div>
         
@@ -190,6 +190,7 @@ try {
             <?php if ($ruolo_nome === 'utente'): ?>
                 <div class="card">
                     <h2>Benvenuto, <?php echo htmlspecialchars($_SESSION['nome']); ?>!</h2>
+                    <p style="margin-bottom: 10px;"><span class="badge attivo">Dashboard utente interattiva</span></p>
                     <?php if (!$quiz_completato): ?>
                         <p style="margin-bottom: 15px;">Rispondi al quiz per ricevere un piano allenamento personalizzato!</p>
                         <button class="btn" onclick="openModal('quizModal')">📋 Inizia Quiz</button>
@@ -458,6 +459,7 @@ try {
     
     <script>
         const ruoloCorrente = '<?php echo addslashes($ruolo_nome); ?>';
+        const pianoAttivoDataFine = '<?php echo $piano_attivo ? addslashes($piano_attivo['data_fine']) : ''; ?>';
 
         function slugify(value) {
             return value
@@ -468,11 +470,28 @@ try {
                 .replace(/-+/g, '-');
         }
 
-        function switchTab(tabName) {
+        function esc(text) {
+            const div = document.createElement('div');
+            div.textContent = String(text ?? '');
+            return div.innerHTML;
+        }
+
+        async function fetchJson(url, options = {}) {
+            const response = await fetch(url, options);
+            const data = await response.json();
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Errore API');
+            }
+            return data;
+        }
+
+        function switchTab(evt, tabName) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
+            if (evt && evt.currentTarget) {
+                evt.currentTarget.classList.add('active');
+            }
             
             if (tabName === 'oggi') loadEsercizioOggi();
             if (tabName === 'progressi') loadProgressi();
@@ -493,29 +512,28 @@ try {
                 orario_notifica: document.getElementById('quiz_ora').value
             };
             
-            fetch('api/quiz.php', {
+            fetchJson('api/quiz.php', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
-            }).then(r => r.json()).then(d => {
+            }).then(d => {
                 if (d.success) {
                     alert('✅ Piano creato! Ricarico la pagina...');
                     location.reload();
                 } else alert('❌ Errore: ' + (d.error || 'sconosciuto'));
-            });
+            }).catch(err => alert('❌ ' + err.message));
         }
         
         function loadEsercizioOggi() {
-            fetch('api/esercizi.php?action=oggi')
-                .then(r => r.json())
+            fetchJson('api/esercizi.php?action=oggi')
                 .then(d => {
                     if (d.success && d.esercizio) {
                         const html = `
                             <div class="esercizio-card">
-                                <div class="nome">${d.esercizio.nome_esercizio}</div>
-                                <div class="info">📝 ${d.esercizio.descrizione}</div>
+                                <div class="nome">${esc(d.esercizio.nome_esercizio)}</div>
+                                <div class="info">📝 ${esc(d.esercizio.descrizione)}</div>
                                 <div class="info">🎯 ${d.esercizio.ripetizioni} ripetizioni × ${d.esercizio.serie} serie</div>
-                                <div class="info">📈 Difficoltà: ${d.esercizio.difficolta_moltiplicatore.toFixed(2)}x</div>
+                                <div class="info">📈 Difficoltà: ${Number(d.esercizio.difficolta_moltiplicatore || 1).toFixed(2)}x</div>
                                 <div class="info">📅 Giorno ${d.giorno_piano} / 28</div>
                             </div>
                             ${d.gia_completato ? '<span class="badge completato">✅ Completato oggi</span>' : `<button class="btn" onclick="prepareCompleteExercise(${d.esercizio.id}, '${d.esercizio.ripetizioni}', '${d.esercizio.serie}')">Completa Esercizio</button>`}
@@ -524,6 +542,9 @@ try {
                     } else {
                         document.getElementById('esercizio-oggi-container').innerHTML = '<p>Nessun esercizio disponibile. Completa il quiz!</p>';
                     }
+                })
+                .catch(() => {
+                    document.getElementById('esercizio-oggi-container').innerHTML = '<p>Nessun esercizio disponibile. Completa il quiz!</p>';
                 });
         }
         
@@ -544,70 +565,192 @@ try {
                 difficolta: 1.0
             };
             
-            fetch('api/esercizi.php?action=completa', {
+            fetchJson('api/esercizi.php?action=completa', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
-            }).then(r => r.json()).then(d => {
+            }).then(d => {
                 if (d.success) {
                     alert('✅ Esercizio completato!');
                     closeModal('completaEsercizioModal');
                     loadEsercizioOggi();
+                    loadHomeStats();
                 }
-            });
+            }).catch(err => alert('❌ ' + err.message));
         }
         
         function loadProgressi() {
-            fetch('api/progressi.php?action=statistiche')
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success) {
-                        let html = '';
-                        d.stats.forEach(s => {
-                            html += `<div style="padding:12px;background:#f5f5f5;margin:8px 0;border-radius:5px;">
-                                <strong>${s.nome_esercizio}</strong><br>
-                                Completato ${s.volte_completato}× | ${s.ripetizioni_totali} tot ripetizioni | Difficoltà: ${s.difficolta_media.toFixed(2)}x
-                            </div>`;
-                        });
-                        document.getElementById('stats-container').innerHTML = html || '<p>Nessun dato ancora</p>';
-                    }
+            Promise.all([
+                fetchJson('api/progressi.php?action=statistiche'),
+                fetchJson('api/progressi.php?action=progressi_ultimi_7')
+            ]).then(([statsRes, progressiRes]) => {
+                let statsHtml = '';
+                (statsRes.stats || []).forEach(s => {
+                    const diff = Number(s.difficolta_media || 1).toFixed(2);
+                    statsHtml += `<div style="padding:12px;background:#f5f5f5;margin:8px 0;border-radius:5px;">
+                        <strong>${esc(s.nome_esercizio)}</strong><br>
+                        Completato ${Number(s.volte_completato || 0)}× | ${Number(s.ripetizioni_totali || 0)} tot ripetizioni | Difficoltà: ${diff}x
+                    </div>`;
                 });
+                document.getElementById('stats-container').innerHTML = statsHtml || '<p>Nessun dato ancora</p>';
+
+                const data = progressiRes.data || [];
+                const maxReps = Math.max(1, ...data.map(p => Number(p.ripetizioni_totali || 0)));
+                let chartHtml = '';
+                data.forEach(p => {
+                    const reps = Number(p.ripetizioni_totali || 0);
+                    const width = Math.max(5, Math.round((reps / maxReps) * 100));
+                    chartHtml += `<div style="margin:10px 0;">
+                        <div style="display:flex;justify-content:space-between;font-size:0.92em;margin-bottom:4px;">
+                            <span>${esc(p.data)}</span>
+                            <strong>${reps} reps</strong>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" style="width:${width}%;"></div></div>
+                    </div>`;
+                });
+                document.getElementById('progressChart').innerHTML = chartHtml || '<p>Nessun allenamento negli ultimi 7 giorni.</p>';
+            }).catch(() => {
+                document.getElementById('stats-container').innerHTML = '<p>Nessun dato ancora</p>';
+                document.getElementById('progressChart').innerHTML = '<p>Dati non disponibili al momento.</p>';
+            });
         }
         
         function loadAmici() {
-            fetch('api/amicizie.php?action=classifica_amici')
-                .then(r => r.json())
+            fetchJson('api/amicizie.php?action=classifica_amici')
                 .then(d => {
                     if (d.success) {
                         let html = '';
                         d.amici.forEach((a, i) => {
-                            html += `<li><strong>#${i+1} ${a.nome} ${a.cognome}</strong> <span>${a.ripetizioni_totali || 0} reps</span></li>`;
+                            html += `<li><strong>#${i + 1} ${esc(a.nome)} ${esc(a.cognome)}</strong> <span>${a.ripetizioni_totali || 0} reps</span></li>`;
                         });
                         document.getElementById('amici-list').innerHTML = html || '<li>Nessun amico</li>';
                     }
+                })
+                .catch(() => {
+                    document.getElementById('amici-list').innerHTML = '<li>Nessun amico</li>';
                 });
         }
         
         function loadClassifiche() {
-            fetch('api/amicizie.php?action=classifica_amici')
-                .then(r => r.json())
+            fetchJson('api/amicizie.php?action=classifica_amici')
                 .then(d => {
                     let html = '';
-                    d.amici.forEach((a, i) => {
-                        html += `<li><strong>#${i+1} ${a.nome}</strong> <span>${a.ripetizioni_totali || 0} reps</span></li>`;
+                    (d.amici || []).forEach((a, i) => {
+                        html += `<li><strong>#${i + 1} ${esc(a.nome)}</strong> <span>${a.ripetizioni_totali || 0} reps</span></li>`;
                     });
-                    document.getElementById('classifica-amici').innerHTML = html;
+                    document.getElementById('classifica-amici').innerHTML = html || '<li>Nessun dato</li>';
                 });
             
-            fetch('api/amicizie.php?action=classifica_mondiale')
-                .then(r => r.json())
+            fetchJson('api/amicizie.php?action=classifica_mondiale')
                 .then(d => {
                     let html = '';
-                    d.utenti.forEach((u, i) => {
-                        html += `<li><strong>#${i+1} ${u.nome}</strong> <span>${u.ripetizioni_totali || 0} reps</span></li>`;
+                    (d.utenti || []).forEach((u, i) => {
+                        html += `<li><strong>#${i + 1} ${esc(u.nome)}</strong> <span>${u.ripetizioni_totali || 0} reps</span></li>`;
                     });
-                    document.getElementById('classifica-mondiale').innerHTML = html;
+                    document.getElementById('classifica-mondiale').innerHTML = html || '<li>Nessun dato</li>';
+                })
+                .catch(() => {
+                    document.getElementById('classifica-amici').innerHTML = '<li>Nessun dato</li>';
+                    document.getElementById('classifica-mondiale').innerHTML = '<li>Nessun dato</li>';
                 });
+        }
+
+        function updateGiorniRimanenti() {
+            const giorniEl = document.getElementById('giorni_rimanenti');
+            if (!giorniEl || !pianoAttivoDataFine) return;
+
+            const oggi = new Date();
+            const fine = new Date(pianoAttivoDataFine + 'T23:59:59');
+            const diffDays = Math.max(0, Math.ceil((fine - oggi) / (1000 * 60 * 60 * 24)));
+            giorniEl.textContent = String(diffDays);
+        }
+
+        function wireFriendSearch() {
+            const input = document.getElementById('cerca_username');
+            const risultati = document.getElementById('risultati-ricerca');
+            if (!input || !risultati) return;
+
+            let timer = null;
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                const q = input.value.trim();
+                if (q.length < 2) {
+                    risultati.innerHTML = '<p>Scrivi almeno 2 caratteri.</p>';
+                    return;
+                }
+
+                timer = setTimeout(() => {
+                    fetchJson('api/amicizie.php?action=cerca_utente&q=' + encodeURIComponent(q))
+                        .then(d => {
+                            let html = '';
+                            (d.utenti || []).forEach(u => {
+                                const stato = u.stato_amicizia || 'nessuno';
+                                let cta = `<button class="btn" style="margin:0" onclick="addFriend(${u.id})">Aggiungi</button>`;
+                                if (stato === 'pending') cta = '<span class="badge attivo">Richiesta inviata</span>';
+                                if (stato === 'accepted') cta = '<span class="badge completato">Già amico</span>';
+
+                                html += `<div style="padding:10px;background:#f5f5f5;margin:8px 0;border-radius:5px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                                    <div>
+                                        <strong>${esc(u.nome)} ${esc(u.cognome)}</strong><br>
+                                        <small>${esc(u.email)}</small>
+                                    </div>
+                                    ${cta}
+                                </div>`;
+                            });
+
+                            risultati.innerHTML = html || '<p>Nessun utente trovato.</p>';
+                        })
+                        .catch(() => {
+                            risultati.innerHTML = '<p>Ricerca non disponibile.</p>';
+                        });
+                }, 250);
+            });
+        }
+
+        function addFriend(amicoId) {
+            fetchJson('api/amicizie.php?action=add_amico', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({amico_id: amicoId})
+            }).then(d => {
+                if (!d.success) {
+                    alert('❌ ' + (d.error || 'Impossibile inviare la richiesta'));
+                    return;
+                }
+                alert('✅ Richiesta amicizia inviata');
+                loadAmici();
+            }).catch(err => {
+                alert('❌ ' + err.message);
+            });
+        }
+
+        function loadHomeStats() {
+            fetchJson('api/progressi.php?action=totali')
+                .then(d => {
+                    if (!d.success) return;
+                    const t = d.totali || {};
+                    const giorniEl = document.getElementById('giorni_allenamento');
+                    const repsEl = document.getElementById('ripetizioni_totali');
+                    const diffEl = document.getElementById('difficolta_media');
+
+                    if (giorniEl) giorniEl.textContent = t.giorni_allenamento || 0;
+                    if (repsEl) repsEl.textContent = t.ripetizioni_totali || 0;
+                    if (diffEl) diffEl.textContent = Number(t.difficolta_media || 1).toFixed(1) + 'x';
+
+                    const esCompletatiEl = document.getElementById('esercizi_completati');
+                    if (esCompletatiEl) {
+                        esCompletatiEl.textContent = t.esercizi_completati || 0;
+                    }
+
+                    const progressEl = document.getElementById('plan_progress');
+                    if (progressEl && pianoAttivoDataFine) {
+                        const giorniTotali = 28;
+                        const rimanenti = Number(document.getElementById('giorni_rimanenti')?.textContent || 0);
+                        const completamento = Math.max(0, Math.min(100, Math.round(((giorniTotali - rimanenti) / giorniTotali) * 100)));
+                        progressEl.style.width = completamento + '%';
+                    }
+                })
+                .catch(() => {});
         }
 
         function loadTenants() {
@@ -673,22 +816,18 @@ try {
         }
         
         document.addEventListener('DOMContentLoaded', () => {
-            if (ruoloCorrente !== 'utente') return;
+            if (ruoloCorrente === 'utente') {
+                updateGiorniRimanenti();
+                loadHomeStats();
+                loadEsercizioOggi();
+                loadProgressi();
+                wireFriendSearch();
+                return;
+            }
 
-            fetch('api/progressi.php?action=totali')
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success) {
-                        const t = d.totali;
-                        const giorniEl = document.getElementById('giorni_allenamento');
-                        const repsEl = document.getElementById('ripetizioni_totali');
-                        const diffEl = document.getElementById('difficolta_media');
-
-                        if (giorniEl) giorniEl.textContent = t.giorni_allenamento || 0;
-                        if (repsEl) repsEl.textContent = t.ripetizioni_totali || 0;
-                        if (diffEl) diffEl.textContent = (t.difficolta_media || 1).toFixed(1) + 'x';
-                    }
-                });
+            if (ruoloCorrente === 'super_admin') {
+                loadTenants();
+            }
         });
     </script>
 </body>
