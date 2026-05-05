@@ -15,6 +15,44 @@ $ruolo_nome = 'utente';
 $tenant_id = homeworkoutCurrentTenantId();
 $is_super_admin = false;
 
+function homeworkoutBuildSevenDaySeries(array $rows): array {
+    $series = [];
+    for ($i = 6; $i >= 0; $i--) {
+        $date = date('Y-m-d', strtotime('-' . $i . ' day'));
+        $series[$date] = [
+            'giorno' => $date,
+            'sessioni' => 0,
+            'ripetizioni_totali' => 0,
+        ];
+    }
+
+    foreach ($rows as $row) {
+        $giorno = $row['giorno'] ?? null;
+        if ($giorno && isset($series[$giorno])) {
+            $series[$giorno]['sessioni'] = (int)($row['sessioni'] ?? 0);
+            $series[$giorno]['ripetizioni_totali'] = (int)($row['ripetizioni_totali'] ?? 0);
+        }
+    }
+
+    return array_values($series);
+}
+
+function homeworkoutWorkoutStreak(array $dates): int {
+    $lookup = [];
+    foreach ($dates as $date) {
+        $lookup[$date] = true;
+    }
+
+    $streak = 0;
+    $cursor = date('Y-m-d');
+    while (isset($lookup[$cursor])) {
+        $streak++;
+        $cursor = date('Y-m-d', strtotime($cursor . ' -1 day'));
+    }
+
+    return $streak;
+}
+
 $token = $_SESSION['access_token'] ?? '';
 if (!empty($token)) {
     $tokenData = validateJWT($token);
@@ -53,10 +91,162 @@ try {
     $stmt_quiz->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
     $quiz_completato = $stmt_quiz->fetch();
     
-    $sql_piano = "SELECT * FROM piani_allenamento WHERE utente_id = :utente_id AND tenant_id = :tenant_id AND stato = 'attivo' LIMIT 1";
+    $sql_piano = "SELECT * FROM piani_allenamento WHERE utente_id = :utente_id AND tenant_id = :tenant_id AND stato = 'attivo' ORDER BY id DESC LIMIT 1";
     $stmt_piano = $pdo->prepare($sql_piano);
     $stmt_piano->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
     $piano_attivo = $stmt_piano->fetch();
+
+    $weekly_summary = homeworkoutBuildSevenDaySeries([]);
+    $recent_workouts = [];
+    $plan_exercises = [];
+    $today_exercise_preview = null;
+    $training_streak = 0;
+    $weekly_sessions = 0;
+    $weekly_reps = 0;
+    $plan_days_total = 0;
+    $plan_days_elapsed = 0;
+    $plan_days_remaining = 0;
+    $plan_completion_percent = 0;
+    $tenant_users = [];
+    $tenant_plans = [];
+    $tenant_friend_requests = [];
+    $tenant_stats = [
+        'utenti' => 0,
+        'allenatori' => 0,
+        'amministratori' => 0,
+        'piani_attivi' => 0,
+        'allenamenti_7g' => 0,
+        'richieste_amicizia' => 0,
+    ];
+
+    if ($tenant_id !== null) {
+        $stmtRecent = $pdo->prepare("SELECT p.data_allenamento, p.ripetizioni_fatte, p.serie_fatte, p.feedback, e.nome_esercizio, e.descrizione
+            FROM progressi_dettaglio p
+            LEFT JOIN esercizi_piano e ON e.id = p.esercizio_id AND e.tenant_id = p.tenant_id
+            WHERE p.utente_id = :utente_id AND p.tenant_id = :tenant_id
+            ORDER BY p.data_allenamento DESC, p.id DESC
+            LIMIT 5");
+        $stmtRecent->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
+        $recent_workouts = $stmtRecent->fetchAll();
+
+        $stmtWeekly = $pdo->prepare("SELECT DATE(data_allenamento) AS giorno, COUNT(*) AS sessioni, COALESCE(SUM(ripetizioni_fatte), 0) AS ripetizioni_totali
+            FROM progressi_dettaglio
+            WHERE utente_id = :utente_id AND tenant_id = :tenant_id AND data_allenamento >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(data_allenamento)
+            ORDER BY giorno ASC");
+        $stmtWeekly->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
+        $weekly_summary = homeworkoutBuildSevenDaySeries($stmtWeekly->fetchAll());
+
+        $stmtDates = $pdo->prepare("SELECT DISTINCT DATE(data_allenamento) AS giorno
+            FROM progressi_dettaglio
+            WHERE utente_id = :utente_id AND tenant_id = :tenant_id
+            ORDER BY giorno DESC
+            LIMIT 30");
+        $stmtDates->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
+        $workoutDates = [];
+        while ($row = $stmtDates->fetch()) {
+            $workoutDates[] = $row['giorno'];
+        }
+        $training_streak = homeworkoutWorkoutStreak($workoutDates);
+
+        $stmtStats = $pdo->prepare("SELECT ur.ruolo_id, COUNT(*) AS totale
+            FROM utenti u
+            LEFT JOIN utente_ruolo ur ON ur.utente_id = u.id
+            WHERE u.tenant_id = :tenant_id
+            GROUP BY ur.ruolo_id");
+        $stmtStats->execute(['tenant_id' => $tenant_id]);
+        while ($row = $stmtStats->fetch()) {
+            if ((int)($row['ruolo_id'] ?? 1) === 1) $tenant_stats['utenti'] = (int)$row['totale'];
+            if ((int)($row['ruolo_id'] ?? 0) === 2) $tenant_stats['allenatori'] = (int)$row['totale'];
+            if ((int)($row['ruolo_id'] ?? 0) === 3) $tenant_stats['amministratori'] = (int)$row['totale'];
+        }
+
+        $stmtActivePlans = $pdo->prepare("SELECT COUNT(*) FROM piani_allenamento WHERE tenant_id = :tenant_id AND stato = 'attivo'");
+        $stmtActivePlans->execute(['tenant_id' => $tenant_id]);
+        $tenant_stats['piani_attivi'] = (int)($stmtActivePlans->fetchColumn() ?: 0);
+
+        $stmtRecentWorkoutsCount = $pdo->prepare("SELECT COUNT(*) FROM progressi_dettaglio WHERE tenant_id = :tenant_id AND data_allenamento >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)");
+        $stmtRecentWorkoutsCount->execute(['tenant_id' => $tenant_id]);
+        $tenant_stats['allenamenti_7g'] = (int)($stmtRecentWorkoutsCount->fetchColumn() ?: 0);
+
+        $stmtFriendRequests = $pdo->prepare("SELECT COUNT(*) FROM amicizie WHERE tenant_id = :tenant_id AND stato = 'pending'");
+        $stmtFriendRequests->execute(['tenant_id' => $tenant_id]);
+        $tenant_stats['richieste_amicizia'] = (int)($stmtFriendRequests->fetchColumn() ?: 0);
+
+        $stmtTenantUsers = $pdo->prepare("SELECT u.id, u.nome, u.cognome, u.email, u.livello, u.creato_il, COALESCE(r.nome_ruolo, 'utente') AS ruolo_nome,
+                (
+                    SELECT COUNT(*)
+                    FROM piani_allenamento p
+                    WHERE p.utente_id = u.id AND p.tenant_id = u.tenant_id
+                ) AS piani_totali,
+                (
+                    SELECT MAX(p.data_allenamento)
+                    FROM progressi_dettaglio p
+                    WHERE p.utente_id = u.id AND p.tenant_id = u.tenant_id
+                ) AS ultimo_allenamento
+            FROM utenti u
+            LEFT JOIN utente_ruolo ur ON ur.utente_id = u.id
+            LEFT JOIN ruoli r ON r.id = ur.ruolo_id
+            WHERE u.tenant_id = :tenant_id
+            ORDER BY u.id DESC
+            LIMIT 20");
+        $stmtTenantUsers->execute(['tenant_id' => $tenant_id]);
+        $tenant_users = $stmtTenantUsers->fetchAll();
+
+        $stmtTenantPlans = $pdo->prepare("SELECT p.id, p.utente_id, p.data_inizio, p.data_fine, p.difficolta, p.stato, u.nome, u.cognome
+            FROM piani_allenamento p
+            LEFT JOIN utenti u ON u.id = p.utente_id
+            WHERE p.tenant_id = :tenant_id
+            ORDER BY p.id DESC
+            LIMIT 10");
+        $stmtTenantPlans->execute(['tenant_id' => $tenant_id]);
+        $tenant_plans = $stmtTenantPlans->fetchAll();
+
+        $stmtTenantFriendRequests = $pdo->prepare("SELECT a.id, a.stato, u1.nome AS nome_richiedente, u1.cognome AS cognome_richiedente, u2.nome AS nome_destinatario, u2.cognome AS cognome_destinatario
+            FROM amicizie a
+            LEFT JOIN utenti u1 ON u1.id = a.utente_id
+            LEFT JOIN utenti u2 ON u2.id = a.amico_id
+            WHERE a.tenant_id = :tenant_id
+            ORDER BY a.id DESC
+            LIMIT 10");
+        $stmtTenantFriendRequests->execute(['tenant_id' => $tenant_id]);
+        $tenant_friend_requests = $stmtTenantFriendRequests->fetchAll();
+    }
+
+    if ($piano_attivo) {
+        $stmtPlanExercises = $pdo->prepare("SELECT id, nome_esercizio, descrizione, ripetizioni, serie, giorno, difficolta_moltiplicatore
+            FROM esercizi_piano
+            WHERE piano_id = :piano_id AND tenant_id = :tenant_id
+            ORDER BY giorno ASC
+            LIMIT 7");
+        $stmtPlanExercises->execute(['piano_id' => $piano_attivo['id'], 'tenant_id' => $tenant_id]);
+        $plan_exercises = $stmtPlanExercises->fetchAll();
+
+        $planDaysTotalCalc = (int)floor((strtotime($piano_attivo['data_fine']) - strtotime($piano_attivo['data_inizio'])) / 86400) + 1;
+        $plan_days_total = max(1, $planDaysTotalCalc);
+        $plan_days_elapsed = max(1, min($plan_days_total, (int)floor((time() - strtotime($piano_attivo['data_inizio'])) / 86400) + 1));
+        $plan_days_remaining = max(0, $plan_days_total - $plan_days_elapsed);
+        $plan_completion_percent = (int)round(($plan_days_elapsed / $plan_days_total) * 100);
+
+        $giorno_oggi = max(1, min(28, (int)floor((time() - strtotime($piano_attivo['data_inizio'])) / 86400) + 1));
+        $stmtTodayExercise = $pdo->prepare("SELECT id, nome_esercizio, descrizione, ripetizioni, serie, giorno, difficolta_moltiplicatore
+            FROM esercizi_piano
+            WHERE piano_id = :piano_id AND tenant_id = :tenant_id AND giorno = :giorno
+            LIMIT 1");
+        $stmtTodayExercise->execute(['piano_id' => $piano_attivo['id'], 'tenant_id' => $tenant_id, 'giorno' => $giorno_oggi]);
+        $today_exercise_preview = $stmtTodayExercise->fetch() ?: null;
+    }
+
+    $max_weekly_reps = 0;
+    $weekly_sessions = 0;
+    $weekly_reps = 0;
+    foreach ($weekly_summary as $daySummary) {
+        $sessionCount = (int)($daySummary['sessioni'] ?? 0);
+        $repsCount = (int)($daySummary['ripetizioni_totali'] ?? 0);
+        $max_weekly_reps = max($max_weekly_reps, $repsCount);
+        $weekly_sessions += $sessionCount;
+        $weekly_reps += $repsCount;
+    }
 
     $stats_admin = [
         'utenti' => 0,
@@ -79,6 +269,33 @@ try {
         $stmtTenantName = $pdo->prepare("SELECT nome FROM tenants WHERE id = :tenant_id LIMIT 1");
         $stmtTenantName->execute(['tenant_id' => $tenant_id]);
         $tenant_nome = $stmtTenantName->fetchColumn() ?: null;
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_action']) && ($ruolo_nome === 'amministratore' || $ruolo_nome === 'super_admin')) {
+        $adminAction = $_POST['admin_action'];
+
+        if ($adminAction === 'change_role') {
+            $targetUserId = (int)($_POST['target_user_id'] ?? 0);
+            $targetRoleId = (int)($_POST['target_role_id'] ?? 1);
+            if ($targetUserId > 0 && $targetRoleId >= 1 && $targetRoleId <= 4) {
+                $stmtRoleUpdate = $pdo->prepare("INSERT INTO utente_ruolo (utente_id, ruolo_id) VALUES (:utente_id, :ruolo_id)
+                    ON DUPLICATE KEY UPDATE ruolo_id = VALUES(ruolo_id)");
+                $stmtRoleUpdate->execute(['utente_id' => $targetUserId, 'ruolo_id' => $targetRoleId]);
+                header('Location: dashboard.php?admin=1');
+                exit;
+            }
+        }
+
+        if ($adminAction === 'assign_tenant') {
+            $targetUserId = (int)($_POST['target_user_id'] ?? 0);
+            $targetTenantId = (int)($_POST['target_tenant_id'] ?? 0);
+            if ($targetUserId > 0 && $targetTenantId > 0) {
+                $stmtTenantUpdate = $pdo->prepare("UPDATE utenti SET tenant_id = :tenant_id WHERE id = :user_id");
+                $stmtTenantUpdate->execute(['tenant_id' => $targetTenantId, 'user_id' => $targetUserId]);
+                header('Location: dashboard.php?admin=1');
+                exit;
+            }
+        }
     }
     
 } catch(PDOException $e) {
@@ -150,6 +367,37 @@ try {
         .badge { display: inline-block; padding: 5px 12px; background: #667eea; color: white; border-radius: 20px; font-size: 0.85em; }
         .badge.completato { background: #28a745; }
         .badge.attivo { background: #ffc107; color: #333; }
+        .hero-panel { background: linear-gradient(135deg, #101828 0%, #1f3b73 48%, #7c3aed 100%); color: white; overflow: hidden; }
+        .hero-panel h2 { color: white; border-bottom: 0; padding-bottom: 0; }
+        .hero-panel p { color: rgba(255,255,255,0.86); }
+        .hero-top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .hero-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 18px; }
+        .hero-stat { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.16); padding: 16px; border-radius: 14px; }
+        .hero-stat .label { font-size: 0.82em; opacity: 0.8; margin-bottom: 6px; }
+        .hero-stat .numero { font-size: 1.8em; font-weight: 700; }
+        .quick-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+        .quick-actions .btn { margin-top: 0; }
+        .quick-actions .btn-secondary { background: rgba(255,255,255,0.16); color: white; border: 1px solid rgba(255,255,255,0.2); }
+        .quick-actions .btn-secondary:hover { background: rgba(255,255,255,0.24); }
+        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+        .plan-card, .timeline-item { background: #f7f7fb; border: 1px solid #ececf4; border-radius: 14px; padding: 14px; }
+        .plan-card strong, .timeline-item strong { color: #222; display: block; margin: 6px 0 4px; }
+        .plan-card small, .timeline-item small { color: #666; }
+        .timeline { display: grid; gap: 10px; }
+        .timeline-item { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+        .timeline-item .meta { min-width: 110px; text-align: right; color: #666; font-size: 0.92em; }
+        .weekly-bars { display: grid; gap: 12px; }
+        .weekly-bar-row { display: grid; grid-template-columns: 72px 1fr 54px; gap: 10px; align-items: center; }
+        .weekly-bar-label { color: #666; font-weight: 600; }
+        .empty-state { padding: 18px; border: 1px dashed #d8d8e5; border-radius: 14px; background: #fafafe; color: #666; }
+        .admin-shell { display: grid; gap: 18px; }
+        .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+        .admin-table { width: 100%; border-collapse: collapse; }
+        .admin-table th, .admin-table td { padding: 10px 8px; border-bottom: 1px solid #ececf4; text-align: left; vertical-align: top; }
+        .admin-table th { color: #555; font-size: 0.9em; }
+        .admin-table td small { color: #666; display: block; }
+        .inline-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .inline-form select, .inline-form input { width: auto; min-width: 140px; }
     </style>
 </head>
 <body>
@@ -201,6 +449,59 @@ try {
                         <button class="btn btn-secondary" onclick="openModal('quizModal')" style="margin-top: 15px;">Modifica Quiz</button>
                     <?php endif; ?>
                 </div>
+
+                <div class="card hero-panel">
+                    <div class="hero-top">
+                        <div>
+                            <span class="badge completato">Allenamento da casa</span>
+                            <h2 style="margin-top: 12px;">Il tuo percorso di oggi</h2>
+                            <?php if ($piano_attivo && $today_exercise_preview): ?>
+                                <p>Hai un piano attivo: riparti dal giorno <?php echo (int)$today_exercise_preview['giorno']; ?> e tieni la continuità con <?php echo (int)$training_streak; ?> giorni di fila.</p>
+                            <?php elseif ($piano_attivo): ?>
+                                <p>Il piano è attivo, ma l'esercizio di oggi non è ancora disponibile.</p>
+                            <?php else: ?>
+                                <p>Completa il quiz per generare una scheda allenamento su misura e iniziare subito.</p>
+                            <?php endif; ?>
+                        </div>
+                        <div style="min-width: 220px;">
+                            <div class="hero-stat">
+                                <div class="label">Streak attuale</div>
+                                <div class="numero"><?php echo (int)$training_streak; ?> giorni</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="hero-stat">
+                            <div class="label">Sessioni ultime 7 giorni</div>
+                            <div class="numero"><?php echo (int)$weekly_sessions; ?></div>
+                        </div>
+                        <div class="hero-stat">
+                            <div class="label">Ripetizioni ultime 7 giorni</div>
+                            <div class="numero"><?php echo (int)$weekly_reps; ?></div>
+                        </div>
+                        <div class="hero-stat">
+                            <div class="label">Giorni rimanenti piano</div>
+                            <div class="numero"><?php echo (int)$plan_days_remaining; ?></div>
+                        </div>
+                        <div class="hero-stat">
+                            <div class="label">Completamento piano</div>
+                            <div class="numero"><?php echo (int)$plan_completion_percent; ?>%</div>
+                        </div>
+                    </div>
+                    <div class="quick-actions">
+                        <button class="btn" onclick="switchTab(event, 'oggi')">Avvia workout</button>
+                        <button class="btn btn-secondary" onclick="switchTab(event, 'progressi')">Apri progressi</button>
+                        <button class="btn btn-secondary" onclick="switchTab(event, 'amici')">Gestisci amici</button>
+                        <a href="esercizi.php" class="btn btn-secondary" style="text-decoration:none; display:inline-block;">Catalogo esercizi</a>
+                    </div>
+
+                    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+                        <button class="btn" onclick="openModal('impostazioniAllenamentoModal')">🕒 Impostazioni orario / notifiche</button>
+                        <button class="btn btn-secondary" onclick="openModal('riposoModal')">😴 Imposta periodo di riposo</button>
+                        <button class="btn btn-secondary" onclick="openModal('feedbackFinaleModal')">✍️ Feedback finale piano</button>
+                        <button class="btn" onclick="openModal('creaPianoModal')">➕ Crea nuovo piano</button>
+                    </div>
+                </div>
                 
                 <?php if ($piano_attivo): ?>
                 <div class="card">
@@ -227,6 +528,72 @@ try {
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <div class="card">
+                    <h2>🗓️ Programma della settimana</h2>
+                    <?php if ($plan_exercises): ?>
+                        <div class="plan-grid">
+                            <?php foreach ($plan_exercises as $exercise): ?>
+                                <div class="plan-card">
+                                    <span class="badge">Giorno <?php echo (int)$exercise['giorno']; ?></span>
+                                    <strong><?php echo htmlspecialchars($exercise['nome_esercizio']); ?></strong>
+                                    <small><?php echo htmlspecialchars($exercise['descrizione']); ?></small>
+                                    <div style="margin-top: 10px; color: #444;">
+                                        <?php echo (int)$exercise['ripetizioni']; ?> ripetizioni × <?php echo (int)$exercise['serie']; ?> serie
+                                    </div>
+                                    <div style="margin-top: 6px; color: #666; font-size: 0.9em;">
+                                        Intensità <?php echo number_format((float)$exercise['difficolta_moltiplicatore'], 2); ?>x
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="empty-state">
+                            Nessun programma generato ancora. Completa il quiz per costruire la tua scheda personalizzata.
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="card">
+                    <h2>🕒 Attività recente</h2>
+                    <?php if ($recent_workouts): ?>
+                        <div class="timeline">
+                            <?php foreach ($recent_workouts as $workout): ?>
+                                <div class="timeline-item">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars($workout['nome_esercizio'] ?: 'Allenamento'); ?></strong>
+                                        <small><?php echo htmlspecialchars($workout['descrizione'] ?: 'Sessione completata'); ?></small>
+                                    </div>
+                                    <div class="meta">
+                                        <?php echo htmlspecialchars(date('d/m/Y', strtotime($workout['data_allenamento']))); ?><br>
+                                        <?php echo (int)$workout['ripetizioni_fatte']; ?> reps · <?php echo (int)$workout['serie_fatte']; ?> serie
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="empty-state">
+                            Nessuna sessione registrata ancora. Avvia il primo workout dalla scheda di oggi.
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="card">
+                    <h2>📈 Andamento ultimi 7 giorni</h2>
+                    <div class="weekly-bars">
+                        <?php foreach ($weekly_summary as $daySummary): ?>
+                            <?php
+                                $reps = (int)$daySummary['ripetizioni_totali'];
+                                $width = $max_weekly_reps > 0 ? max(8, (int)round(($reps / $max_weekly_reps) * 100)) : 8;
+                            ?>
+                            <div class="weekly-bar-row">
+                                <div class="weekly-bar-label"><?php echo htmlspecialchars(date('d/m', strtotime($daySummary['giorno']))); ?></div>
+                                <div class="progress-bar"><div class="progress-fill" style="width: <?php echo (int)$width; ?>%;"></div></div>
+                                <strong style="text-align:right; color:#333;"><?php echo $reps; ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
                 
                 <div class="card">
                     <h2>📈 Statistiche Generali</h2>
@@ -354,15 +721,109 @@ try {
 
         <?php if ($ruolo_nome === 'amministratore'): ?>
         <div id="admin" class="tab-content">
-            <div class="card">
-                <h2>🛠️ Gestione Ruoli</h2>
-                <p>I ruoli nel database sono salvati solo come numeri:</p>
-                <ul style="margin-top: 10px; padding-left: 20px;">
-                    <li>1 = utente</li>
-                    <li>2 = allenatore</li>
-                    <li>3 = amministratore</li>
-                    <li>4 = super_admin</li>
-                </ul>
+            <div class="admin-shell">
+                <div class="card">
+                    <h2>🛠️ Console amministrativa</h2>
+                    <p>Da qui puoi vedere gli utenti del tenant, cambiare ruoli e assegnare la palestra corretta ai nuovi iscritti.</p>
+                    <div class="admin-grid" style="margin-top: 15px;">
+                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['utenti']; ?></div><div class="label">Utenti</div></div>
+                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['allenatori']; ?></div><div class="label">Allenatori</div></div>
+                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['amministratori']; ?></div><div class="label">Amministratori</div></div>
+                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['piani_attivi']; ?></div><div class="label">Piani attivi</div></div>
+                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['allenamenti_7g']; ?></div><div class="label">Allenamenti 7g</div></div>
+                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['richieste_amicizia']; ?></div><div class="label">Richieste amico</div></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>👤 Utenti del tenant</h2>
+                    <?php if ($tenant_users): ?>
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Utente</th>
+                                    <th>Ruolo</th>
+                                    <th>Piano / Attività</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($tenant_users as $user): ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars(trim(($user['nome'] ?? '') . ' ' . ($user['cognome'] ?? ''))); ?></strong>
+                                            <small><?php echo htmlspecialchars($user['email']); ?></small>
+                                            <small>Livello: <?php echo htmlspecialchars($user['livello'] ?? 'principiante'); ?></small>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($user['ruolo_nome']); ?></td>
+                                        <td>
+                                            <small>Piani: <?php echo (int)$user['piani_totali']; ?></small>
+                                            <small>Ultimo allenamento: <?php echo $user['ultimo_allenamento'] ? htmlspecialchars(date('d/m/Y', strtotime($user['ultimo_allenamento']))) : 'Mai'; ?></small>
+                                        </td>
+                                        <td>
+                                            <form method="POST" class="inline-form">
+                                                <input type="hidden" name="admin_action" value="change_role">
+                                                <input type="hidden" name="target_user_id" value="<?php echo (int)$user['id']; ?>">
+                                                <select name="target_role_id">
+                                                    <option value="1" <?php echo ($user['ruolo_nome'] === 'utente') ? 'selected' : ''; ?>>Utente</option>
+                                                    <option value="2" <?php echo ($user['ruolo_nome'] === 'allenatore') ? 'selected' : ''; ?>>Allenatore</option>
+                                                    <option value="3" <?php echo ($user['ruolo_nome'] === 'amministratore') ? 'selected' : ''; ?>>Amministratore</option>
+                                                    <option value="4" <?php echo ($user['ruolo_nome'] === 'super_admin') ? 'selected' : ''; ?>>Super admin</option>
+                                                </select>
+                                                <button class="btn" type="submit">Aggiorna ruolo</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php else: ?>
+                        <div class="empty-state">Nessun utente trovato in questo tenant.</div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="card">
+                    <h2>📅 Piani allenamento recenti</h2>
+                    <?php if ($tenant_plans): ?>
+                        <div class="timeline">
+                            <?php foreach ($tenant_plans as $plan): ?>
+                                <div class="timeline-item">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars(trim(($plan['nome'] ?? '') . ' ' . ($plan['cognome'] ?? '')) ?: 'Utente'); ?></strong>
+                                        <small>Dal <?php echo htmlspecialchars(date('d/m/Y', strtotime($plan['data_inizio']))); ?> al <?php echo htmlspecialchars(date('d/m/Y', strtotime($plan['data_fine']))); ?></small>
+                                    </div>
+                                    <div class="meta">
+                                        <?php echo htmlspecialchars(ucfirst($plan['stato'])); ?><br>
+                                        Difficoltà <?php echo (int)$plan['difficolta']; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="empty-state">Nessun piano recente.</div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="card">
+                    <h2>🤝 Richieste amicizia recenti</h2>
+                    <?php if ($tenant_friend_requests): ?>
+                        <div class="timeline">
+                            <?php foreach ($tenant_friend_requests as $request): ?>
+                                <div class="timeline-item">
+                                    <div>
+                                        <strong><?php echo htmlspecialchars(trim(($request['nome_richiedente'] ?? '') . ' ' . ($request['cognome_richiedente'] ?? ''))); ?></strong>
+                                        <small>verso <?php echo htmlspecialchars(trim(($request['nome_destinatario'] ?? '') . ' ' . ($request['cognome_destinatario'] ?? ''))); ?></small>
+                                    </div>
+                                    <div class="meta">
+                                        <?php echo htmlspecialchars(ucfirst($request['stato'])); ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="empty-state">Nessuna richiesta recente.</div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
         <?php endif; ?>
@@ -454,6 +915,74 @@ try {
             <h2>🔍 Cerca Amico</h2>
             <input type="text" id="cerca_username" placeholder="Inserisci username" style="margin-bottom: 15px;">
             <div id="risultati-ricerca"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: IMPOSTAZIONI ALLENAMENTO -->
+    <div id="impostazioniAllenamentoModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('impostazioniAllenamentoModal')">✕</button>
+            <h2>🕒 Impostazioni Allenamento</h2>
+            <form onsubmit="submitTrainingSettings(event)">
+                <div>
+                    <label><strong>Orario notifiche</strong></label>
+                    <input type="time" id="impostazione_orario" value="<?php echo htmlspecialchars($quiz_completato['orario_notifica'] ?? '08:00'); ?>" required>
+                </div>
+                <div>
+                    <label><strong>Abilita notifiche</strong></label>
+                    <select id="impostazione_notifiche">
+                        <option value="1">Attive</option>
+                        <option value="0">Disattive</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Salva impostazioni</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: RIPOSO -->
+    <div id="riposoModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('riposoModal')">✕</button>
+            <h2>😴 Periodo di Riposo</h2>
+            <form onsubmit="submitRestSettings(event)">
+                <div>
+                    <label><strong>Giorni di riposo consigliati</strong></label>
+                    <input type="number" id="riposo_giorni" min="0" max="14" value="1" required>
+                </div>
+                <div>
+                    <small>Verrà usato per calcolare pause automatiche in base alla continuità.</small>
+                </div>
+                <button type="submit" class="btn">Salva riposo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: FEEDBACK FINALE PIANO -->
+    <div id="feedbackFinaleModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('feedbackFinaleModal')">✕</button>
+            <h2>✍️ Feedback Finale</h2>
+            <form onsubmit="submitFinalFeedback(event)">
+                <div>
+                    <label><strong>Come è andato il piano?</strong></label>
+                    <textarea id="feedback_finale" rows="4" placeholder="Scrivi un feedback finale..."></textarea>
+                </div>
+                <button type="submit" class="btn">Invia feedback</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CREA NUOVO PIANO -->
+    <div id="creaPianoModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('creaPianoModal')">✕</button>
+            <h2>➕ Crea Nuovo Piano</h2>
+            <p>Creare un nuovo piano sostituirà il piano attivo (se presente). Confermi?</p>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:10px;">
+                <button class="btn btn-secondary" onclick="closeModal('creaPianoModal')">Annulla</button>
+                <button class="btn" onclick="createNewPlan()">Conferma e crea</button>
+            </div>
         </div>
     </div>
     
@@ -813,6 +1342,79 @@ try {
                     alert('❌ ' + (d.error || 'Impossibile attivare la palestra'));
                 }
             });
+        }
+        
+        async function submitTrainingSettings(e) {
+            e.preventDefault();
+            const payload = {
+                orario_notifica: document.getElementById('impostazione_orario').value,
+                notifiche_attive: Number(document.getElementById('impostazione_notifiche').value)
+            };
+
+            try {
+                const res = await fetchJson('api/quiz.php?action=update_settings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if (res.success) {
+                    alert('✅ Impostazioni salvate');
+                    closeModal('impostazioniAllenamentoModal');
+                    location.reload();
+                }
+            } catch (err) {
+                alert('❌ ' + err.message);
+            }
+        }
+
+        async function submitRestSettings(e) {
+            e.preventDefault();
+            const payload = { riposo_giorni: Number(document.getElementById('riposo_giorni').value) };
+            try {
+                const res = await fetchJson('api/piani.php?action=set_rest', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if (res.success) {
+                    alert('✅ Riposo salvato');
+                    closeModal('riposoModal');
+                }
+            } catch (err) {
+                alert('❌ ' + err.message);
+            }
+        }
+
+        async function submitFinalFeedback(e) {
+            e.preventDefault();
+            const feedback = document.getElementById('feedback_finale').value.trim();
+            try {
+                const res = await fetchJson('api/feedback.php?action=finale', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({feedback})
+                });
+                if (res.success) {
+                    alert('✅ Feedback inviato, grazie!');
+                    closeModal('feedbackFinaleModal');
+                }
+            } catch (err) {
+                alert('❌ ' + err.message);
+            }
+        }
+
+        async function createNewPlan() {
+            if (!confirm('Sei sicuro di voler creare un nuovo piano? Questo potrebbe sovrascrivere il piano attivo.')) return;
+            try {
+                const res = await fetchJson('api/piani.php?action=create_new', { method: 'POST' });
+                if (res.success) {
+                    alert('✅ Nuovo piano creato');
+                    closeModal('creaPianoModal');
+                    location.reload();
+                }
+            } catch (err) {
+                alert('❌ ' + err.message);
+            }
         }
         
         document.addEventListener('DOMContentLoaded', () => {

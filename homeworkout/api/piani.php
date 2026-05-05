@@ -10,80 +10,49 @@ if (!isset($_SESSION['utente_id'])) {
 
 $utente_id = $_SESSION['utente_id'];
 $tenant_id = homeworkoutCurrentTenantId();
+$action = $_GET['action'] ?? '';
 
 if ($tenant_id === null) {
     echo json_encode(['error' => 'Tenant non disponibile']);
     exit;
 }
 
-$action = $_GET['action'] ?? '';
+try {
+    if ($action === 'set_rest' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $riposo = isset($data['riposo_giorni']) ? (int)$data['riposo_giorni'] : 1;
 
-if ($action === 'update_settings' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
-    $orario = $data['orario_notifica'] ?? null;
-    $notifiche_attive = isset($data['notifiche_attive']) ? (int)$data['notifiche_attive'] : 1;
-
-    try {
-        // assicurati che la colonna esista
-        if (!function_exists('columnExists') || !columnExists($pdo, 'quiz_risposte', 'notifiche_attive')) {
-            try { $pdo->exec("ALTER TABLE quiz_risposte ADD COLUMN notifiche_attive INT DEFAULT 1"); } catch (PDOException $e) {}
-        }
-
-        $sql = "INSERT INTO quiz_risposte (tenant_id, utente_id, orario_notifica, notifiche_attive, completato)
-                VALUES (:tenant_id, :utente_id, :orario, :notifiche, 1)
-                ON DUPLICATE KEY UPDATE orario_notifica = VALUES(orario_notifica), notifiche_attive = VALUES(notifiche_attive)";
+        // inserisci o aggiorna record periodi_riposo
+        $sql = "INSERT INTO periodi_riposo (tenant_id, utente_id, giorni_riposo_consigliati, ultimo_allenamento)
+                VALUES (:tenant_id, :utente_id, :giorni, CURDATE())
+                ON DUPLICATE KEY UPDATE giorni_riposo_consigliati = VALUES(giorni_riposo_consigliati), ultimo_allenamento = VALUES(ultimo_allenamento)";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             'tenant_id' => $tenant_id,
             'utente_id' => $utente_id,
-            'orario' => $orario,
-            'notifiche' => $notifiche_attive
+            'giorni' => $riposo
         ]);
 
         echo json_encode(['success' => true]);
-    } catch (PDOException $e) {
-        echo json_encode(['error' => $e->getMessage()]);
+        exit;
     }
-    exit;
-}
 
-// Default: crea piano dal quiz (comportamento preesistente)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = json_decode(file_get_contents('php://input'), true);
-    
-    $eta = $data['eta'] ?? null;
-    $livello = $data['livello_fitness'] ?? 'principiante';
-    $obiettivo = $data['obiettivo'] ?? '';
-    $orario = $data['orario_notifica'] ?? '08:00';
-    
-    try {
-        $stmtClosePlans = $pdo->prepare("UPDATE piani_allenamento SET stato = 'completato' WHERE utente_id = :utente_id AND tenant_id = :tenant_id AND stato = 'attivo'");
-        $stmtClosePlans->execute([
-            'utente_id' => $utente_id,
-            'tenant_id' => $tenant_id
-        ]);
+    if ($action === 'create_new' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        // chiudi piani attivi
+        $stmtClose = $pdo->prepare("UPDATE piani_allenamento SET stato = 'completato' WHERE utente_id = :utente_id AND tenant_id = :tenant_id AND stato = 'attivo'");
+        $stmtClose->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
 
-        // Salva risposte quiz
-        $sql = "INSERT INTO quiz_risposte (tenant_id, utente_id, eta, livello_fitness, obiettivo, orario_notifica, completato) 
-            VALUES (:tenant_id, :utente_id, :eta, :livello, :obiettivo, :orario, 1)
-                ON DUPLICATE KEY UPDATE eta=:eta, livello_fitness=:livello, obiettivo=:obiettivo, orario_notifica=:orario";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            'tenant_id' => $tenant_id,
-            'utente_id' => $utente_id,
-            'eta' => $eta,
-            'livello' => $livello,
-            'obiettivo' => $obiettivo,
-            'orario' => $orario
-        ]);
-        
-        // Crea piano personalizzato
+        // prendi informazioni dal quiz se presenti
+        $stmtQuiz = $pdo->prepare("SELECT livello_fitness FROM quiz_risposte WHERE utente_id = :utente_id AND tenant_id = :tenant_id LIMIT 1");
+        $stmtQuiz->execute(['utente_id' => $utente_id, 'tenant_id' => $tenant_id]);
+        $quiz = $stmtQuiz->fetch();
+        $livello = $quiz['livello_fitness'] ?? 'principiante';
+
         $data_inizio = date('Y-m-d');
         $data_fine = date('Y-m-d', strtotime('+28 days'));
         $difficolta = ($livello === 'principiante') ? 2 : (($livello === 'intermedio') ? 3 : 4);
-        
-        $sql_piano = "INSERT INTO piani_allenamento (tenant_id, utente_id, data_inizio, data_fine, difficolta, stato) 
+
+        $sql_piano = "INSERT INTO piani_allenamento (tenant_id, utente_id, data_inizio, data_fine, difficolta, stato)
                       VALUES (:tenant_id, :utente_id, :inizio, :fine, :diff, 'attivo')";
         $stmt_piano = $pdo->prepare($sql_piano);
         $stmt_piano->execute([
@@ -93,10 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'fine' => $data_fine,
             'diff' => $difficolta
         ]);
-        
         $piano_id = $pdo->lastInsertId();
-        
-        // Genera esercizi per ogni giorno
+
+        // genera esercizi semplici, riutilizza lista base dal quiz
         $esercizi_base = [
             'principiante' => [
                 ['Push-up a muro', 'A muro per principianti', 10, 3],
@@ -126,15 +94,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ['L-sit', 'L-sit hold', 30, 3],
             ]
         ];
-        
+
         $esercizi = $esercizi_base[$livello] ?? $esercizi_base['principiante'];
-        
         for ($giorno = 1; $giorno <= 28; $giorno++) {
             $ex_idx = ($giorno - 1) % count($esercizi);
             $ex = $esercizi[$ex_idx];
             $moltiplicatore = 1.0 + (floor(($giorno - 1) / 7) * 0.15);
-            
-            $sql_ex = "INSERT INTO esercizi_piano (tenant_id, piano_id, nome_esercizio, descrizione, ripetizioni, serie, giorno, difficolta_moltiplicatore) 
+
+            $sql_ex = "INSERT INTO esercizi_piano (tenant_id, piano_id, nome_esercizio, descrizione, ripetizioni, serie, giorno, difficolta_moltiplicatore)
                        VALUES (:tenant_id, :piano_id, :nome, :desc, :rip, :serie, :giorno, :molt)";
             $stmt_ex = $pdo->prepare($sql_ex);
             $stmt_ex->execute([
@@ -148,11 +115,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'molt' => $moltiplicatore
             ]);
         }
-        
+
         echo json_encode(['success' => true, 'piano_id' => $piano_id]);
-        
-    } catch (PDOException $e) {
-        echo json_encode(['error' => $e->getMessage()]);
+        exit;
     }
+
+    echo json_encode(['error' => 'Azione non riconosciuta']);
+} catch (PDOException $e) {
+    echo json_encode(['error' => $e->getMessage()]);
 }
-?>

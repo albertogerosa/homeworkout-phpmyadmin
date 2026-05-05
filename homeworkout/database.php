@@ -187,6 +187,19 @@ function createTables($pdo) {
             FOREIGN KEY (piano_id) REFERENCES piani_allenamento(id),
             FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
         )"
+        ,
+        "CREATE TABLE IF NOT EXISTS notifiche (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            tenant_id INT NULL,
+            utente_id INT NOT NULL,
+            tipo VARCHAR(80) DEFAULT 'allenamento',
+            testo TEXT,
+            inviato INT DEFAULT 0,
+            data_programmata DATETIME,
+            data_invio TIMESTAMP NULL,
+            FOREIGN KEY (utente_id) REFERENCES utenti(id),
+            FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+        )"
     ];
     
     foreach ($tables as $sql) {
@@ -309,4 +322,39 @@ function seedInitialSuperAdmin(PDO $pdo): void {
 }
 
 seedInitialSuperAdmin($pdo);
+
+function ensureRoleSeedConsistency(PDO $pdo): void {
+    $roleMap = [
+        1 => ['utente', 'Utente standard'],
+        2 => ['allenatore', 'Coach/allenatore'],
+        3 => ['amministratore', 'Amministratore piattaforma'],
+        4 => ['super_admin', 'Super amministratore multi-tenant'],
+    ];
+
+    foreach ($roleMap as $id => [$nomeRuolo, $descrizione]) {
+        try {
+            $stmtCheck = $pdo->prepare("SELECT id FROM ruoli WHERE id = :id LIMIT 1");
+            $stmtCheck->execute(['id' => $id]);
+            if ($stmtCheck->fetchColumn()) {
+                $stmtUpdate = $pdo->prepare("UPDATE ruoli SET nome_ruolo = :nome_ruolo, descrizione = :descrizione WHERE id = :id");
+                $stmtUpdate->execute([
+                    'id' => $id,
+                    'nome_ruolo' => $nomeRuolo,
+                    'descrizione' => $descrizione,
+                ]);
+            } else {
+                $stmtInsert = $pdo->prepare("INSERT INTO ruoli (id, nome_ruolo, descrizione) VALUES (:id, :nome_ruolo, :descrizione)");
+                $stmtInsert->execute([
+                    'id' => $id,
+                    'nome_ruolo' => $nomeRuolo,
+                    'descrizione' => $descrizione,
+                ]);
+            }
+        } catch (PDOException $e) {
+            // Se il ruolo non può essere aggiornato, lasciamo il seed attuale
+        }
+    }
+}
+
+ensureRoleSeedConsistency($pdo);
 ?>
