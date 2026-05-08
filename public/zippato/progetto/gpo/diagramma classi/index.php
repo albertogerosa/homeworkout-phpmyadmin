@@ -21,7 +21,9 @@
 <body class="container py-5">
     <h1 class="mb-4">Diagramma delle Classi del Sito</h1>
     <div class="diagram-container">
-        <img src="../../IMG/classi.png" alt="Diagramma delle Classi">
+        <a href="er.png" target="_blank" rel="noopener">
+            <img src="er.png" alt="Diagramma delle Classi">
+        </a>
     </div>
     <div class="card p-3 mt-4">
         <h2 class="h5">Documentazione collegata</h2>

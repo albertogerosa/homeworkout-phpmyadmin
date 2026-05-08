@@ -53,7 +53,7 @@
     <main class="container py-4 py-md-5">
         <section class="hero mb-4">
             <h1 class="h3 mb-2">Manuale Utente di Homeworkout</h1>
-            <p class="mb-0">Guida pratica per orientarti nel sito: registrazione, login, dashboard e funzioni principali.</p>
+            <p class="mb-0">Guida pratica per orientarti nel sito: registrazione, login, dashboard, quiz, progressi e gestione delle palestre.</p>
         </section>
 
         <section class="card card-section mb-3">
@@ -87,7 +87,7 @@
                 <h2 class="h5">3. Login e accesso dashboard</h2>
                 <p>Dopo il login corretto verrai portato nella dashboard personale.</p>
                 <div class="hint mt-2">
-                    La dashboard cambia in base al ruolo: <strong>utente</strong>, <strong>allenatore</strong> o <strong>amministratore</strong>.
+                    La dashboard cambia in base al ruolo: <strong>utente</strong>, <strong>allenatore</strong>, <strong>amministratore</strong> o <strong>super admin</strong>.
                 </div>
             </div>
         </section>
@@ -100,25 +100,30 @@
                 <ul>
                     <li>Se e il primo accesso, premi <strong>Inizia Quiz</strong>.</li>
                     <li>Compila il quiz con eta, livello fitness, obiettivo e orario allenamento.</li>
-                    <li>Il sistema crea un piano personalizzato di 28 giorni.</li>
+                    <li>Puoi riaprire il quiz con <strong>Modifica Quiz</strong> per aggiornare le impostazioni.</li>
+                    <li>Il sistema salva il quiz, aggiorna le notifiche e crea un piano personalizzato di 28 giorni chiudendo i piani attivi precedenti.</li>
+                    <li>Qui vedi anche il piano attivo, la streak, le sessioni degli ultimi 7 giorni, le ripetizioni, i giorni rimanenti e la percentuale di completamento.</li>
                 </ul>
 
                 <p><span class="step-badge">4.2</span><strong>Tab Oggi</strong></p>
                 <ul>
                     <li>Vedi l'esercizio assegnato per il giorno corrente.</li>
                     <li>Clicca <strong>Completa Esercizio</strong> per salvare ripetizioni, serie e feedback.</li>
+                    <li>Se non c'e ancora un esercizio disponibile per quel giorno, il sistema mostra un messaggio chiaro invece di una scheda vuota.</li>
                 </ul>
 
                 <p><span class="step-badge">4.3</span><strong>Tab Progressi</strong></p>
                 <ul>
                     <li>Controlli i dati degli ultimi allenamenti.</li>
                     <li>Visualizzi statistiche per esercizio (volte completato e ripetizioni totali).</li>
+                    <li>Visualizzi anche l'andamento degli ultimi 7 giorni con esercizi eseguiti e ripetizioni totali.</li>
                 </ul>
 
                 <p><span class="step-badge">4.4</span><strong>Tab Amici</strong></p>
                 <ul>
                     <li>Vedi la lista amici e puoi cercarne di nuovi.</li>
                     <li>Da qui puoi inviare richieste amicizia.</li>
+                    <li>Puoi anche controllare le richieste recenti e lo stato delle relazioni.</li>
                 </ul>
 
                 <p><span class="step-badge">4.5</span><strong>Tab Classifica</strong></p>
@@ -134,7 +139,8 @@
                 <h2 class="h5">5. Altri ruoli</h2>
                 <ul class="mb-0">
                     <li><strong>Allenatore:</strong> puo consultare progressi e classifiche.</li>
-                    <li><strong>Amministratore:</strong> vede la sezione admin con riepilogo ruoli e supervisione.</li>
+                    <li><strong>Amministratore:</strong> vede la sezione admin con utenti del tenant, piani recenti e richieste amicizia.</li>
+                    <li><strong>Super admin:</strong> gestisce le palestre, crea nuovi tenant, li attiva e assegna utenti alle palestre.</li>
                 </ul>
             </div>
         </section>
@@ -146,9 +152,22 @@
                     Se non riesci a entrare, verifica email e password e riprova il login.
                 </div>
                 <ul class="mb-0">
-                    <li>Se non vedi esercizi in <strong>Oggi</strong>, completa prima il quiz.</li>
+                    <li>Se non vedi esercizi in <strong>Oggi</strong>, completa prima il quiz oppure attendi che il piano attivo venga ricalcolato.</li>
+                    <li>Se compare il messaggio di esercizio non disponibile, significa che il piano esiste ma non c'e ancora una scheda per quel giorno.</li>
                     <li>Se la sessione scade, rifai il login.</li>
                     <li>Per uscire in sicurezza usa sempre il pulsante <strong>Esci</strong>.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="card card-section mb-4">
+            <div class="card-body">
+                <h2 class="h5">7. Impostazioni e notifiche</h2>
+                <p>Dal quiz puoi aggiornare in qualunque momento l'orario di notifica e l'attivazione delle notifiche.</p>
+                <ul class="mb-0">
+                    <li>L'orario allenamento viene salvato insieme alle risposte del quiz.</li>
+                    <li>Le impostazioni notifiche vengono aggiornate senza dover rifare tutto il quiz.</li>
+                    <li>Se vuoi ripartire da zero, il piano nuovo chiude quello attivo precedente e ne crea uno nuovo da 28 giorni.</li>
                 </ul>
             </div>
         </section>

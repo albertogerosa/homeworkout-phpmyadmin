@@ -211,7 +211,7 @@
         </section>
 
         <section class="note">
-            Questa pagina e un mockup di navigazione: raccoglie le rotte principali trovate in HomeWorkout e le divide per area (Web, API applicative, API JWT).
+            Questa pagina e un mockup di navigazione: raccoglie le rotte principali trovate in HomeWorkout e le divide per area (Web, API applicative, API JWT), includendo anche le funzionalita piu recenti del dashboard e della gestione multi-palestra.
         </section>
 
         <div class="legend">
@@ -255,12 +255,13 @@
             <article class="card">
                 <h2>Viste interne Dashboard</h2>
                 <div class="tabs">
-                    <div class="tab">Home (utente, allenatore, amministratore)</div>
-                    <div class="tab">Oggi (utente)</div>
-                    <div class="tab">Progressi (utente, allenatore)</div>
-                    <div class="tab">Amici (utente)</div>
-                    <div class="tab">Classifica (utente, allenatore)</div>
-                    <div class="tab">Admin (amministratore)</div>
+                    <div class="tab">Home con stato quiz, streak, piano attivo, progressi rapidi e riepilogo ultimi workout</div>
+                    <div class="tab">Oggi con esercizio del giorno, completamento allenamento e messaggio esplicito se manca l'esercizio</div>
+                    <div class="tab">Progressi con statistiche esercizi e andamento degli ultimi 7 giorni</div>
+                    <div class="tab">Amici con richieste, ricerca e gestione relazioni</div>
+                    <div class="tab">Classifica amici e classifica mondiale</div>
+                    <div class="tab">Admin con panoramica utenti, piani e richieste recenti del tenant</div>
+                    <div class="tab">Super admin con creazione, attivazione e assegnazione delle palestre</div>
                 </div>
             </article>
 
@@ -269,15 +270,23 @@
                 <ul class="route-list">
                     <li class="route-item">
                         <span class="path">/homeworkout/api/quiz.php</span>
-                        <div class="desc"><span class="method m-post">POST</span>Salva quiz utente e genera piano da 28 giorni <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
+                        <div class="desc"><span class="method m-post">POST</span>Salva quiz utente, aggiorna le impostazioni notifiche e genera un nuovo piano da 28 giorni chiudendo i piani attivi precedenti <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
                     </li>
                     <li class="route-item">
                         <span class="path">/homeworkout/api/esercizi.php?action=oggi</span>
-                        <div class="desc"><span class="method m-get">GET</span>Recupera esercizio del giorno dal piano attivo <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
+                        <div class="desc"><span class="method m-get">GET</span>Recupera l'esercizio del giorno dal piano attivo e segnala un errore esplicito se non esiste un esercizio per oggi <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
                     </li>
                     <li class="route-item">
                         <span class="path">/homeworkout/api/esercizi.php?action=completa</span>
                         <div class="desc"><span class="method m-post">POST</span>Salva completamento allenamento e aggiorna statistiche <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
+                    </li>
+                    <li class="route-item">
+                        <span class="path">/homeworkout/api/piani.php?action=create_new</span>
+                        <div class="desc"><span class="method m-post">POST</span>Crea un nuovo piano partendo dal quiz, chiude il piano attivo corrente e rigenera gli esercizi <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
+                    </li>
+                    <li class="route-item">
+                        <span class="path">/homeworkout/api/piani.php?action=set_rest</span>
+                        <div class="desc"><span class="method m-post">POST</span>Salva i giorni di riposo consigliati per l'utente <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
                     </li>
                     <li class="route-item">
                         <span class="path">/homeworkout/api/progressi.php?action=statistiche</span>
@@ -306,6 +315,10 @@
                     <li class="route-item">
                         <span class="path">/homeworkout/api/qapi.php</span>
                         <div class="desc"><span class="method m-get">GET</span>Ritorna info utente/ruolo da token (header Bearer, query o sessione) <span class="tag api">JSON</span> <span class="tag jwt">JWT</span></div>
+                    </li>
+                    <li class="route-item">
+                        <span class="path">/homeworkout/api/tenants.php?action=list|create|activate|assign_user</span>
+                        <div class="desc"><span class="method m-get">GET</span><span class="method m-post">POST</span>Gestione palestre per il super admin: elenco, creazione, attivazione e assegnazione utenti <span class="tag api">JSON</span> <span class="tag auth">Sessione</span></div>
                     </li>
                 </ul>
             </article>
