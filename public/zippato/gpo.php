@@ -55,6 +55,9 @@
         <div class="project-card">
             <a class="btn btn-outline-info btn-lg w-100" href="/homeworkout/">Applicazione Homeworkout</a>
         </div>
+        <div class="project-card">
+            <a class="btn btn-outline-dark btn-lg w-100" href="progetto/gpo/descrizione_applicazione_homeworkout.php">descrizone applicazione homeworkout</a>
+        </div>
     </div>
     <a href="../home.php" class="btn btn-secondary mt-3">Torna indietro</a>
 

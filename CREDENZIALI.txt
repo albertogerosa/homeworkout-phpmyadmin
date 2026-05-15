@@ -1,0 +1,59 @@
+═════════════════════════════════════════════════════════════════════
+                    📋 CREDENZIALI HOME WORKOUT
+═════════════════════════════════════════════════════════════════════
+
+🔐 CREDENZIALI PHPMYADMIN
+─────────────────────────────────────────────────────────────────────
+Host:       localhost
+Utente:     utente_phpmyadmin
+Password:   Password1!
+URL:        http://localhost/phpmyadmin
+Accesso:    Utilizzare le credenziali sopra per accedere a phpMyAdmin
+
+
+🔐 CREDENZIALI DATABASE
+─────────────────────────────────────────────────────────────────────
+Host:               127.0.0.1 / localhost
+Database Principale: home_workout
+Database Secondario: allenamenti
+Utente:             utente_phpmyadmin
+Password:           Password1!
+Charset:            utf8mb4
+
+
+👨‍💼 SUPER AMMINISTRATORE HOME WORKOUT
+─────────────────────────────────────────────────────────────────────
+Email:      superadmin@homeworkout.local
+Password:   ChangeMe123!
+Ruolo:      Admin
+Nota:       Accedi a http://localhost per accedere all'applicazione
+
+
+📝 CREDENZIALI UTENTE WORKOUT (Se configurato)
+─────────────────────────────────────────────────────────────────────
+Username:   admin
+Password:   admin123
+
+
+🔑 BLOWFISH SECRET (phpMyAdmin)
+─────────────────────────────────────────────────────────────────────
+Secret:     qwertyuiopasdfghjklzxcvbnmqwerty
+
+
+═════════════════════════════════════════════════════════════════════
+                    📍 POSIZIONI NEL CODICE
+═════════════════════════════════════════════════════════════════════
+
+config.php:
+  Righe 2-4: Credenziali database principale
+
+homeworkout/database.php:
+  Righe 2-4: Credenziali database
+  Righe 5-6: Credenziali super admin
+
+install.sh:
+  Righe 7-11: Configurazione credenziali phpmyadmin e workout
+  Riga 8: Blowfish secret
+
+
+═════════════════════════════════════════════════════════════════════
