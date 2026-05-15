@@ -44,6 +44,7 @@ function homeworkoutWorkoutStreak(array $dates): int {
     }
 
     $streak = 0;
+    
     $cursor = date('Y-m-d');
     while (isset($lookup[$cursor])) {
         $streak++;
@@ -915,6 +916,7 @@ try {
             <h2>🔍 Cerca Amico</h2>
             <input type="text" id="cerca_username" placeholder="Inserisci username" style="margin-bottom: 15px;">
             <div id="risultati-ricerca"></div>
+            <div id="feedback-amico" style="display:none; padding:12px; margin-top:15px; border-radius:5px; background:#e8f5e9; color:#2e7d32; text-align:center;"></div>
         </div>
     </div>
 
@@ -1243,13 +1245,53 @@ try {
                 body: JSON.stringify({amico_id: amicoId})
             }).then(d => {
                 if (!d.success) {
-                    alert('❌ ' + (d.error || 'Impossibile inviare la richiesta'));
+                    console.error('Errore: ' + (d.error || 'Impossibile inviare la richiesta'));
                     return;
                 }
-                alert('✅ Richiesta amicizia inviata');
+                
+                // Mostra feedback positivo
+                const feedbackDiv = document.getElementById('feedback-amico');
+                feedbackDiv.textContent = '✅ Richiesta amicizia inviata!';
+                feedbackDiv.style.display = 'block';
+                
+                // Aggiorna la ricerca per mostrare lo stato aggiornato
+                const input = document.getElementById('cerca_username');
+                if (input && input.value.trim().length >= 2) {
+                    const q = input.value.trim();
+                    fetchJson('api/amicizie.php?action=cerca_utente&q=' + encodeURIComponent(q))
+                        .then(d => {
+                            let html = '';
+                            (d.utenti || []).forEach(u => {
+                                const stato = u.stato_amicizia || 'nessuno';
+                                let cta = `<button class="btn" style="margin:0" onclick="addFriend(${u.id})">Aggiungi</button>`;
+                                if (stato === 'pending') cta = '<span class="badge attivo">✓ Richiesta inviata</span>';
+                                if (stato === 'accepted') cta = '<span class="badge completato">✓ Già amico</span>';
+
+                                html += `<div style="padding:10px;background:#f5f5f5;margin:8px 0;border-radius:5px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+                                    <div>
+                                        <strong>${esc(u.nome)} ${esc(u.cognome)}</strong><br>
+                                        <small>${esc(u.email)}</small>
+                                    </div>
+                                    ${cta}
+                                </div>`;
+                            });
+
+                            document.getElementById('risultati-ricerca').innerHTML = html || '<p>Nessun utente trovato.</p>';
+                        })
+                        .catch(() => {});
+                }
                 loadAmici();
+                
+                // Chiudi il modal dopo 2 secondi
+                setTimeout(() => {
+                    closeModal('cercaAmicoModal');
+                    feedbackDiv.style.display = 'none';
+                    document.getElementById('cerca_username').value = '';
+                    document.getElementById('risultati-ricerca').innerHTML = '';
+                }, 2000);
+                
             }).catch(err => {
-                alert('❌ ' + err.message);
+                console.error('Errore: ' + err.message);
             });
         }
 
