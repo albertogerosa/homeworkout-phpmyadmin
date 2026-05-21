@@ -16,12 +16,12 @@ final class JwtHelperTest extends TestCase
 
     public function testGenerateAndValidateJwtWithTenantAndRole(): void
     {
-        $token = generateJWT(42, 5, 2, 7, 'Tenant A');
+        $token = generateJWT(42, 5, 3, 7, 'Tenant A');
         $payload = validateJWT($token);
 
         $this->assertIsArray($payload);
         $this->assertSame(42, $payload['user_id']);
-        $this->assertSame(2, $payload['role_id']);
+        $this->assertSame(3, $payload['role_id']);
         $this->assertSame(7, $payload['tenant_id']);
         $this->assertSame('Tenant A', $payload['tenant_name']);
         $this->assertGreaterThan(time(), $payload['exp']);

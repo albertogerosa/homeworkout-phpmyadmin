@@ -9,7 +9,6 @@ function homeworkoutEnsureSessionStarted(): void {
 function homeworkoutRoleNameFromId($roleId): string {
     $map = [
         1 => 'utente',
-        2 => 'allenatore',
         3 => 'amministratore',
         4 => 'super_admin'
     ];

@@ -87,7 +87,7 @@
                 <h2 class="h5">3. Login e accesso dashboard</h2>
                 <p>Dopo il login corretto verrai portato nella dashboard personale.</p>
                 <div class="hint mt-2">
-                    La dashboard cambia in base al ruolo: <strong>utente</strong>, <strong>allenatore</strong>, <strong>amministratore</strong> o <strong>super admin</strong>.
+                    La dashboard cambia in base al ruolo: <strong>utente</strong>, <strong>amministratore</strong> o <strong>super admin</strong>.
                 </div>
             </div>
         </section>
@@ -138,7 +138,6 @@
             <div class="card-body">
                 <h2 class="h5">5. Altri ruoli</h2>
                 <ul class="mb-0">
-                    <li><strong>Allenatore:</strong> puo consultare progressi e classifiche.</li>
                     <li><strong>Amministratore:</strong> vede la sezione admin con utenti del tenant, piani recenti e richieste amicizia.</li>
                     <li><strong>Super admin:</strong> gestisce le palestre, crea nuovi tenant, li attiva e assegna utenti alle palestre.</li>
                 </ul>

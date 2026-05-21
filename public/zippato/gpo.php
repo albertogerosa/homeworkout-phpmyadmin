@@ -85,7 +85,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body text-center zoom-container">
-                    <img id="casiUsoImg" src="progetto/gpo/diagramma classi/casi_uso.png" alt="Diagramma Casi d'Uso" class="img-fluid zoomable-img">
+                    <img id="casiUsoImg" src="uso2.png" alt="Diagramma Casi d'Uso" class="img-fluid zoomable-img">
                 </div>
             </div>
         </div>
@@ -100,7 +100,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body text-center zoom-container">
-                    <img id="classiImg" src="progetto/gpo/diagramma classi/classi.png" alt="Diagramma Classi" class="img-fluid zoomable-img">
+                    <img id="classiImg" src="progetto/gpo/diagramma classi/classinew.png" alt="Diagramma Classi" class="img-fluid zoomable-img">
                 </div>
             </div>
         </div>

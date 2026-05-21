@@ -113,7 +113,6 @@ try {
     $tenant_friend_requests = [];
     $tenant_stats = [
         'utenti' => 0,
-        'allenatori' => 0,
         'amministratori' => 0,
         'piani_attivi' => 0,
         'allenamenti_7g' => 0,
@@ -158,7 +157,6 @@ try {
         $stmtStats->execute(['tenant_id' => $tenant_id]);
         while ($row = $stmtStats->fetch()) {
             if ((int)($row['ruolo_id'] ?? 1) === 1) $tenant_stats['utenti'] = (int)$row['totale'];
-            if ((int)($row['ruolo_id'] ?? 0) === 2) $tenant_stats['allenatori'] = (int)$row['totale'];
             if ((int)($row['ruolo_id'] ?? 0) === 3) $tenant_stats['amministratori'] = (int)$row['totale'];
         }
 
@@ -251,16 +249,14 @@ try {
 
     $stats_admin = [
         'utenti' => 0,
-        'allenatori' => 0,
         'amministratori' => 0
     ];
 
-    if ($ruolo_nome === 'amministratore' || $ruolo_nome === 'allenatore') {
+    if ($ruolo_nome === 'amministratore' || $ruolo_nome === 'super_admin') {
         $stmtCount = $pdo->prepare("SELECT ur.ruolo_id, COUNT(*) AS totale FROM utente_ruolo ur INNER JOIN utenti u ON u.id = ur.utente_id WHERE u.tenant_id = :tenant_id GROUP BY ur.ruolo_id");
         $stmtCount->execute(['tenant_id' => $tenant_id]);
         while ($row = $stmtCount->fetch()) {
             if ((int)$row['ruolo_id'] === 1) $stats_admin['utenti'] = (int)$row['totale'];
-            if ((int)$row['ruolo_id'] === 2) $stats_admin['allenatori'] = (int)$row['totale'];
             if ((int)$row['ruolo_id'] === 3) $stats_admin['amministratori'] = (int)$row['totale'];
         }
     }
@@ -423,9 +419,6 @@ try {
                 <button class="tab" onclick="switchTab(event, 'oggi')">💪 Oggi</button>
                 <button class="tab" onclick="switchTab(event, 'progressi')">📊 Progressi</button>
                 <button class="tab" onclick="switchTab(event, 'amici')">👥 Amici</button>
-                <button class="tab" onclick="switchTab(event, 'classifica')">🏆 Classifica</button>
-            <?php elseif ($ruolo_nome === 'allenatore'): ?>
-                <button class="tab" onclick="switchTab(event, 'progressi')">📊 Progressi</button>
                 <button class="tab" onclick="switchTab(event, 'classifica')">🏆 Classifica</button>
             <?php elseif ($ruolo_nome === 'amministratore'): ?>
                 <button class="tab" onclick="switchTab(event, 'admin')">🛠️ Admin</button>
@@ -613,28 +606,6 @@ try {
                         </div>
                     </div>
                 </div>
-            <?php elseif ($ruolo_nome === 'allenatore'): ?>
-                <div class="card">
-                    <h2>Dashboard Allenatore</h2>
-                    <p>Visualizzi una dashboard dedicata al monitoraggio degli utenti e delle classifiche.</p>
-                </div>
-                <div class="card">
-                    <h2>📌 Riepilogo Ruoli</h2>
-                    <div class="grid">
-                        <div class="stat-box">
-                            <div class="numero"><?php echo (int)$stats_admin['utenti']; ?></div>
-                            <div class="label">Utenti</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="numero"><?php echo (int)$stats_admin['allenatori']; ?></div>
-                            <div class="label">Allenatori</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="numero"><?php echo (int)$stats_admin['amministratori']; ?></div>
-                            <div class="label">Amministratori</div>
-                        </div>
-                    </div>
-                </div>
             <?php else: ?>
                 <div class="card">
                     <h2>Dashboard Amministratore</h2>
@@ -646,10 +617,6 @@ try {
                         <div class="stat-box">
                             <div class="numero"><?php echo (int)$stats_admin['utenti']; ?></div>
                             <div class="label">Ruolo 1 - Utente</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="numero"><?php echo (int)$stats_admin['allenatori']; ?></div>
-                            <div class="label">Ruolo 2 - Allenatore</div>
                         </div>
                         <div class="stat-box">
                             <div class="numero"><?php echo (int)$stats_admin['amministratori']; ?></div>
@@ -676,7 +643,7 @@ try {
         </div>
         <?php endif; ?>
         
-        <?php if ($ruolo_nome === 'utente' || $ruolo_nome === 'allenatore'): ?>
+        <?php if ($ruolo_nome === 'utente'): ?>
         <!-- TAB: PROGRESSI -->
         <div id="progressi" class="tab-content">
             <div class="card">
@@ -704,7 +671,7 @@ try {
         </div>
         <?php endif; ?>
         
-        <?php if ($ruolo_nome === 'utente' || $ruolo_nome === 'allenatore'): ?>
+        <?php if ($ruolo_nome === 'utente'): ?>
         <!-- TAB: CLASSIFICA -->
         <div id="classifica" class="tab-content">
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -728,7 +695,6 @@ try {
                     <p>Da qui puoi vedere gli utenti del tenant, cambiare ruoli e assegnare la palestra corretta ai nuovi iscritti.</p>
                     <div class="admin-grid" style="margin-top: 15px;">
                         <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['utenti']; ?></div><div class="label">Utenti</div></div>
-                        <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['allenatori']; ?></div><div class="label">Allenatori</div></div>
                         <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['amministratori']; ?></div><div class="label">Amministratori</div></div>
                         <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['piani_attivi']; ?></div><div class="label">Piani attivi</div></div>
                         <div class="stat-box"><div class="numero"><?php echo (int)$tenant_stats['allenamenti_7g']; ?></div><div class="label">Allenamenti 7g</div></div>
@@ -767,7 +733,6 @@ try {
                                                 <input type="hidden" name="target_user_id" value="<?php echo (int)$user['id']; ?>">
                                                 <select name="target_role_id">
                                                     <option value="1" <?php echo ($user['ruolo_nome'] === 'utente') ? 'selected' : ''; ?>>Utente</option>
-                                                    <option value="2" <?php echo ($user['ruolo_nome'] === 'allenatore') ? 'selected' : ''; ?>>Allenatore</option>
                                                     <option value="3" <?php echo ($user['ruolo_nome'] === 'amministratore') ? 'selected' : ''; ?>>Amministratore</option>
                                                     <option value="4" <?php echo ($user['ruolo_nome'] === 'super_admin') ? 'selected' : ''; ?>>Super admin</option>
                                                 </select>

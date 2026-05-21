@@ -213,7 +213,6 @@ function createTables($pdo) {
     try {
         $pdo->exec("INSERT IGNORE INTO ruoli (id, nome_ruolo, descrizione) VALUES
             (1, 'utente', 'Utente standard'),
-            (2, 'allenatore', 'Coach/allenatore'),
             (3, 'amministratore', 'Amministratore piattaforma'),
             (4, 'super_admin', 'Super amministratore multi-tenant')");
     } catch (PDOException $e) {
@@ -326,7 +325,6 @@ seedInitialSuperAdmin($pdo);
 function ensureRoleSeedConsistency(PDO $pdo): void {
     $roleMap = [
         1 => ['utente', 'Utente standard'],
-        2 => ['allenatore', 'Coach/allenatore'],
         3 => ['amministratore', 'Amministratore piattaforma'],
         4 => ['super_admin', 'Super amministratore multi-tenant'],
     ];
@@ -357,4 +355,20 @@ function ensureRoleSeedConsistency(PDO $pdo): void {
 }
 
 ensureRoleSeedConsistency($pdo);
+
+function removeDeprecatedTrainerRole(PDO $pdo): void {
+    try {
+        if (tableExists($pdo, 'utente_ruolo')) {
+            $pdo->exec("UPDATE utente_ruolo SET ruolo_id = 1 WHERE ruolo_id = 2");
+        }
+
+        if (tableExists($pdo, 'ruoli')) {
+            $pdo->exec("DELETE FROM ruoli WHERE id = 2");
+        }
+    } catch (PDOException $e) {
+        // Migrazione non applicabile, lasciamo il database invariato
+    }
+}
+
+removeDeprecatedTrainerRole($pdo);
 ?>

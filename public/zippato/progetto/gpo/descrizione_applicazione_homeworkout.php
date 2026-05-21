@@ -23,7 +23,7 @@
     <ol class="mb-4">
         <li>Registrazione e login utenti con password hashate.</li>
         <li>Gestione sessione autenticata con token JWT (access + refresh).</li>
-        <li>Supporto ruoli: utente, allenatore, amministratore, super admin.</li>
+        <li>Supporto ruoli: utente, amministratore, super admin.</li>
         <li>Isolamento dati per tenant e selezione tenant attivo per super admin.</li>
         <li>Quiz iniziale fitness con salvataggio risposte e preferenze notifiche.</li>
         <li>Creazione automatica piano allenamento di 28 giorni in base al livello.</li>
