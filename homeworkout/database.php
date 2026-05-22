@@ -1,7 +1,7 @@
 <?php
 // Configurazione parametri database
 $host = "127.0.0.1";
-$db_name = "allenamenti";
+$db_name = "home_workout";
 $username_db = "utente_phpmyadmin"; // Sostituisci se necessario
 $password_db = "Password1!";
 //email: superadmin@homeworkout.local

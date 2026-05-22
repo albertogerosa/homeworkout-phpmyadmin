@@ -1,6 +1,6 @@
 <?php
 header("Content-Type: application/json");
-require_once '../database.php'; // Usa la config che punta a 'allenamenti'
+require_once '../database.php'; // Usa la config che punta a 'home_workout'
 require_once '../tenant_helper.php';
 require_once 'jwt_helper.php';
 
